@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+
+[build.environment]
+  # @netlify/blobs requires Node 22.12 or newer.
+  NODE_VERSION = "22"
+
+[functions]
+  # Prepare, analysis, and coaching call OpenAI and often exceed the 10s default.
+  # Synchronous functions still cap at 26s, and that higher limit has to be enabled for the site.
+  timeout = 26
