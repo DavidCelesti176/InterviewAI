@@ -10,7 +10,7 @@ import type {
   InterviewType,
   RoleAnalysis,
 } from "@/lib/interview/types";
-import { planModel } from "@/lib/live/config";
+import { planModel, planReasoning } from "@/lib/live/config";
 
 const blueprintSchema = {
   type: "object",
@@ -125,6 +125,7 @@ export async function buildInterviewBlueprint(
   const client = new OpenAI({ maxRetries: 0 });
   const response = await client.responses.create({
     model: planModel(),
+    reasoning: planReasoning,
     instructions:
       "Build private guidance for a live interviewer. Do not write a numbered script. Priority order: job description, candidate experience ceiling, interview type, resume, then company style. Company style never raises the authority you may assume. A hard question tests thinking about work the candidate could have done, not a more senior job. Question-mix numbers are rough percentages. Follow-up notes are angles to use only when an answer is vague, incomplete, or important. Do not write notes that say to probe every answer. Pacing should vary difficulty and leave time to move on. Return at most 5 competencies, 5 resume topics, 5 role topics, 3 follow-up notes, and 4 behaviors to avoid.",
     input: `Interview type: ${config.interviewType}. ${typeNotes[config.interviewType]}

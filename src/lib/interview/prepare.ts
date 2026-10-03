@@ -38,16 +38,17 @@ export async function prepareInterview(input: {
   onStep: (step: PrepareStep, state: "active" | "done") => void;
 }): Promise<{ summary: PreparationSummary; debug: PreparationDebug }> {
   input.onStep("understanding_role", "active");
-  const roleAnalysis = await analyzeRole(input.config);
+  input.onStep("researching_company", "active");
+  const [roleAnalysis, company] = await Promise.all([
+    analyzeRole(input.config),
+    researchCompany(input.config.company, input.config.jobTitle),
+  ]);
   input.onStep("understanding_role", "done");
+  input.onStep("researching_company", "done");
 
   input.onStep("calibrating_difficulty", "active");
   const difficultyCurve = curveFor(roleAnalysis);
   input.onStep("calibrating_difficulty", "done");
-
-  input.onStep("researching_company", "active");
-  const company = await researchCompany(input.config.company, input.config.jobTitle);
-  input.onStep("researching_company", "done");
 
   input.onStep("building_plan", "active");
   const blueprint = await buildInterviewBlueprint(input.config, roleAnalysis, company.profile);

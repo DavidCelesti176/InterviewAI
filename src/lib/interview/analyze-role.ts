@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { clampScore } from "@/lib/interview/difficulty";
 import { calibrateJobLevel, clampCandidateProfile, isCandidateProfile } from "@/lib/interview/experience-calibration";
 import type { CandidateLevel, InterviewConfig, RoleAnalysis } from "@/lib/interview/types";
-import { planModel } from "@/lib/live/config";
+import { planModel, planReasoning } from "@/lib/live/config";
 
 const levels: CandidateLevel[] = [
   "intern",
@@ -119,6 +119,7 @@ export async function analyzeRole(config: InterviewConfig): Promise<RoleAnalysis
   const client = new OpenAI({ maxRetries: 0 });
   const response = await client.responses.create({
     model: planModel(),
+    reasoning: planReasoning,
     instructions:
       "Judge the job and the candidate separately. The job description decides who the job is hiring. The title is a weak signal: Supply Chain Manager, Account Manager, and Product Manager can be new-graduate or entry-level roles. Recent graduate, campus hire, graduating class, 0–2 years, no experience required, or internship-preferred language outweighs the word Manager. Internship experience preferred means the new hire may have interned. It does not make a full-time role an internship. A graduating student hired into a full-time job is recent_grad. Use intern only when the job itself is an internship. Do not treat Manager as people leadership unless the description says the person manages employees. Do not treat Analyst as entry-level unless the description says so. Do not raise the job level because the resume looks strong. Role complexity can be high even when the hire is a new graduate. Interview difficulty should follow the experience the job expects, not the complexity of the function. Scores are integers from 1 to 5. Use 0 for an unknown years bound. Return at most 5 competencies. Then profile the candidate from the resume only. A student or recent graduate who led a project, rotated across teams, or owns a small business still has low strategic decision authority and no enterprise people management. Do not turn campus leadership or a small business into executive influence. relevantExperienceYears is a number, 0 if unclear.",
     input: `Interview type: ${config.interviewType}

@@ -2,7 +2,7 @@ import OpenAI from "openai";
 
 import { readCompanyProfile, writeCompanyProfile } from "@/lib/company/profile-cache";
 import type { CompanyInterviewProfile } from "@/lib/interview/types";
-import { planModel } from "@/lib/live/config";
+import { planModel, planReasoning } from "@/lib/live/config";
 
 const profileSchema = {
   type: "object",
@@ -106,7 +106,8 @@ async function searchCompany(company: string, jobTitle: string): Promise<Researc
   const client = new OpenAI({ maxRetries: 0 });
   const response = await client.responses.create({
     model: planModel(),
-    tools: [{ type: "web_search", search_context_size: "medium" }],
+    reasoning: planReasoning,
+    tools: [{ type: "web_search", search_context_size: "low" }],
     include: ["web_search_call.action.sources"],
     instructions:
       "Research how this company interviews candidates. Prefer official careers pages, official interview-preparation pages, and official campus-recruiting material. Then recent consistent candidate reports. Treat one anecdote as weak. Do not invent a process, a question, or a date. If evidence is thin or conflicting, say so. Note whether a pattern is company-wide or role-specific.",
@@ -125,6 +126,7 @@ async function structureProfile(company: string, notes: ResearchNotes): Promise<
   const client = new OpenAI({ maxRetries: 0 });
   const response = await client.responses.create({
     model: planModel(),
+    reasoning: planReasoning,
     instructions:
       "Turn research notes into a cautious company interview profile. Official sources outweigh candidate reports. Recent reports outweigh old ones. Use unknown when evidence is missing. Use low confidence when evidence is thin, conflicting, or only anecdotal. Do not claim the company always asks something. Only include source URLs that appear in the supplied URL list. Use an empty string when a date is unknown. Return at most 5 patterns, 5 competencies, 4 process notes, and 6 sources.",
     input: `Company: ${company}

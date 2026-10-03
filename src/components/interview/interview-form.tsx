@@ -179,6 +179,10 @@ export function InterviewForm() {
     let leaving = false;
     try {
       const response = await fetch("/api/interview/prepare", { method: "POST", body: form });
+      if (response.status === 413) {
+        setError("That PDF is too large for the site. Use a file under 6 MB.");
+        return;
+      }
       const contentType = response.headers.get("content-type") ?? "";
       if (!contentType.includes("ndjson")) {
         const body: unknown = await response.json().catch(() => null);
@@ -193,7 +197,7 @@ export function InterviewForm() {
         setPrepareSteps((current) => current.map((item) => (item.id === step ? { ...item, state } : item)));
       });
       if (prepared.error || !prepared.summary) {
-        setError(prepared.error || "The interview plan could not be created. Check the job description and resume, then try again.");
+        setError(prepared.error || "Preparing the interview was interrupted before it finished. Try again.");
         return;
       }
       if (prepared.debug) savePreparationDebug(prepared.debug);
