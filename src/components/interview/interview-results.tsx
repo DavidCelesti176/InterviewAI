@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { interviewerById } from "@/components/interview/avatar/profile";
 import { PageShell } from "@/components/interview/page-shell";
 import { AnalysisLoading, type AnalysisStepId } from "@/components/interview/results/analysis-loading";
 import { HighlightCard } from "@/components/interview/results/highlight-card";
@@ -125,6 +126,7 @@ export function InterviewResults() {
         company: saved.setup.company,
         jobTitle: saved.setup.jobTitle,
         interviewType: saved.setup.interviewType,
+        interviewerProfileId: saved.setup.interviewerProfileId,
         questions: questions.map((item) => item.question),
       });
       router.push("/interview/practice");
@@ -180,6 +182,7 @@ export function InterviewResults() {
         <p className="text-sm font-medium text-accent">Interview complete</p>
         <h1 className="text-4xl font-semibold tracking-tight">{result.setup.company}</h1>
         <p className="text-lg text-muted">{result.setup.jobTitle}</p>
+        <p className="text-sm text-muted">Practiced with {interviewerById(result.setup.interviewerProfileId).name}</p>
         <p className="text-sm text-muted">
           {interviewModeLabel(result.setup.interviewMode)} · {interviewTypeLabel(result.setup.interviewType)} · {formatDuration(result.elapsedMs)}
         </p>

@@ -20,6 +20,7 @@ export type InterviewSetup = {
   resumeFileName: string;
   levelLabel?: string;
   emphasisLabel?: string;
+  interviewerProfileId?: string;
 };
 
 export type JobEntryMode = "paste" | "manual";
@@ -41,6 +42,7 @@ export type PracticeSetup = {
   jobTitle: string;
   interviewType: InterviewType;
   questions: string[];
+  interviewerProfileId?: string;
 };
 
 export type PracticeNotice = {

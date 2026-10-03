@@ -237,6 +237,7 @@ export function InterviewForm() {
         resumeFileName: summary.resumeFileName,
         levelLabel: summary.levelLabel,
         emphasisLabel: summary.emphasisLabel,
+        interviewerProfileId: "jordan",
       });
       leaving = true;
       router.push("/interview/prepare");

@@ -173,9 +173,107 @@ body {
   opacity: var(--halo, 0.3);
 }
 
-.avatar-stage svg {
+.avatar-portrait {
   position: relative;
   z-index: 1;
+  height: 100%;
+  animation: avatar-crossfade 320ms ease, avatar-breath 6.2s ease-in-out infinite;
+}
+
+.portrait-frame {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #1b2733;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.38);
+  transform-origin: center bottom;
+}
+
+.portrait-base,
+.portrait-jaw,
+.portrait-overlay {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 16%;
+}
+
+.portrait-base {
+  display: block;
+}
+
+.portrait-jaw,
+.portrait-overlay,
+.portrait-blink,
+.portrait-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.portrait-jaw {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 47%, #000 56%);
+  mask-image: linear-gradient(to bottom, transparent 47%, #000 56%);
+  transform: translateY(calc(var(--mouth, 0) * 4px));
+}
+
+.portrait-blink {
+  inset: auto;
+  top: 36.5%;
+  left: 28%;
+  right: 28%;
+  height: 6.5%;
+  border-radius: 40%;
+  background: linear-gradient(to bottom, rgba(20, 16, 14, 0.05), rgba(12, 10, 9, 0.72), rgba(20, 16, 14, 0.05));
+  opacity: var(--blink, 0);
+}
+
+.portrait-light {
+  background: radial-gradient(circle at 50% 28%, transparent 42%, rgba(6, 10, 18, 0.34) 100%);
+}
+
+.portrait-eyes-closed {
+  opacity: var(--blink, 0);
+}
+
+.portrait-mouth-closed {
+  opacity: var(--mouth-closed, 1);
+}
+
+.portrait-mouth-small {
+  opacity: var(--mouth-slight, 0);
+}
+
+.portrait-mouth-medium {
+  opacity: var(--mouth-medium, 0);
+}
+
+.portrait-mouth-wide {
+  opacity: var(--mouth-wide, 0);
+}
+
+[data-avatar-state="idle"] .portrait-frame,
+[data-avatar-state="muted"] .portrait-frame,
+[data-avatar-state="connecting"] .portrait-frame {
+  animation: avatar-drift 7.6s ease-in-out infinite;
+}
+
+[data-avatar-state="listening"] .portrait-frame {
+  animation: avatar-nod 14s ease-in-out infinite;
+}
+
+[data-avatar-state="speaking"] .portrait-frame {
+  animation: avatar-speak 3.6s ease-in-out infinite;
+}
+
+@keyframes avatar-crossfade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .avatar-head,
@@ -372,6 +470,8 @@ body {
   .prep-spin,
   .prep-indeterminate::after,
   .avatar-stage,
+  .avatar-portrait,
+  .portrait-frame,
   .avatar-head,
   .avatar-body,
   .avatar-lid,

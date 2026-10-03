@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { InterviewerAvatar } from "@/components/interview/avatar/interviewer-avatar";
-import { defaultInterviewer, interviewerRoleLabel } from "@/components/interview/avatar/profile";
+import { interviewerById } from "@/components/interview/avatar/profile";
 import type { AvatarState } from "@/components/interview/avatar/types";
 import { InterviewHelpPanel } from "@/components/interview/interview-help-panel";
 import { PauseOverlay } from "@/components/interview/pause-overlay";
@@ -107,7 +107,7 @@ export function InterviewRoom({
 
   const avatarState = snapshot.paused ? "idle" : toAvatarState(snapshot.status, snapshot.muted);
   const finished = snapshot.status === "Ended";
-  const role = interviewerRoleLabel(setup.interviewType);
+  const interviewer = interviewerById(setup.interviewerProfileId);
   const pacing = process.env.NODE_ENV === "development" ? pacingDiagnostics(snapshot.turns, snapshot.elapsedMs) : null;
   const coachingEnabled = mode === "interview" && interviewModeOf(setup.interviewMode) === "practice";
   const live = mode === "interview" && snapshot.canEnd && !snapshot.paused && !finished;
@@ -140,7 +140,7 @@ export function InterviewRoom({
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-5 text-center">
         <div className="relative min-h-0 w-full flex-1">
           <div className="absolute inset-0 flex items-center justify-center">
-            <InterviewerAvatar state={avatarState} levelRef={levelRef} profile={defaultInterviewer} />
+            <InterviewerAvatar state={avatarState} levelRef={levelRef} profile={interviewer} />
           </div>
         </div>
         {finished ? (
@@ -152,8 +152,8 @@ export function InterviewRoom({
           </div>
         ) : (
           <div className="mt-2 flex shrink-0 flex-col gap-0.5">
-            <p className="text-2xl font-semibold tracking-tight">{defaultInterviewer.name}</p>
-            <p className="text-sm text-white/60">{role}</p>
+            <p className="text-2xl font-semibold tracking-tight">{interviewer.name}</p>
+            <p className="text-sm text-white/60">{interviewer.title}</p>
             <p className="mt-1 text-sm text-white/80" aria-live="polite">
               {roomStatusLabel(snapshot.status, snapshot.muted, mode)}
             </p>
@@ -223,6 +223,14 @@ export function InterviewRoom({
         <summary className="cursor-pointer font-medium text-white/80">Developer debug</summary>
         <div className="mt-4 flex flex-col gap-4">
           <p>
+            Interviewer: {interviewer.id}
+            {` · voice ${interviewer.voice ?? "session default"}`}
+            {` · avatar ${avatarState}`}
+            {" · level "}
+            <span data-avatar-debug-level>0.00</span>
+            {" · mouth "}
+            <span data-avatar-debug-mouth>closed</span>
+            {" · "}
             Mode: {mode === "practice" ? "Answer practice" : interviewModeLabel(setup.interviewMode)}
             {` · pauses ${snapshot.pauseEvents.length}`}
             {` · paused ${formatElapsed(snapshot.pausedMs)}`}

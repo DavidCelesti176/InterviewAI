@@ -5,6 +5,13 @@ export function normalizeSpeechLevel(level: number): number {
   return scaled;
 }
 
+export function mouthState(openness: number): "closed" | "small" | "medium" | "wide" {
+  if (openness < 0.12) return "closed";
+  if (openness < 0.38) return "small";
+  if (openness < 0.7) return "medium";
+  return "wide";
+}
+
 export function mouthWeights(openness: number): { closed: number; slight: number; medium: number; wide: number } {
   const stops = [
     { key: "closed", at: 0 },

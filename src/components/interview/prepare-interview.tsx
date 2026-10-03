@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { interviewerById } from "@/components/interview/avatar/profile";
+import { InterviewerPicker } from "@/components/interview/interviewer-picker";
 import { MicrophoneCheck } from "@/components/interview/microphone-check";
 import { PreparationDebugPanel } from "@/components/interview/preparation-debug";
 import { PageShell } from "@/components/interview/page-shell";
@@ -10,7 +12,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProgressSteps } from "@/components/ui/progress-steps";
 import { StatusRow } from "@/components/ui/status-row";
-import { readInterviewSetup } from "@/lib/interview/browser-state";
+import { readInterviewSetup, saveInterviewSetup } from "@/lib/interview/browser-state";
 import { interviewModeLabel, interviewTypeLabel } from "@/lib/interview/labels";
 
 export function PrepareInterview() {
@@ -65,6 +67,14 @@ export function PrepareInterview() {
         <h1 className="text-4xl font-semibold tracking-tight">Your interview is ready.</h1>
         <p className="text-lg text-muted">Check your sound, then enter the room when you want to begin.</p>
       </header>
+      <InterviewerPicker
+        value={interviewerById(setup.interviewerProfileId).id}
+        onChange={(id) => {
+          const next = { ...setup, interviewerProfileId: id };
+          saveInterviewSetup(next);
+          setSetup(next);
+        }}
+      />
       <Card className="flex flex-col gap-2 p-6">
         <p className="text-2xl font-semibold">{setup.company}</p>
         <p className="text-lg">{setup.jobTitle}</p>

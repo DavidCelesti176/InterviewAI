@@ -35,6 +35,7 @@ export function PracticeRoom() {
     targetDurationMinutes: Math.min(20, Math.max(8, practice.questions.length * 5)),
     durationChoice: "15",
     resumeFileName: "",
+    interviewerProfileId: practice.interviewerProfileId,
   };
 
   return <InterviewRoom setup={setup} mode="practice" practiceQuestions={practice.questions} />;
