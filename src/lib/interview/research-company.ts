@@ -2,7 +2,7 @@ import OpenAI from "openai";
 
 import { readCompanyProfile, writeCompanyProfile } from "@/lib/company/profile-cache";
 import type { CompanyInterviewProfile } from "@/lib/interview/types";
-import { planModel, planReasoning } from "@/lib/live/config";
+import { planModel, planReasoning, planRequestTimeoutMs } from "@/lib/live/config";
 
 const profileSchema = {
   type: "object",
@@ -102,40 +102,23 @@ function collectUrls(response: OpenAI.Responses.Response): string[] {
   return [...urls].slice(0, 8);
 }
 
-async function searchCompany(company: string, jobTitle: string): Promise<ResearchNotes> {
-  const client = new OpenAI({ maxRetries: 0 });
+export function unavailableCompanyProfile(company: string): CompanyInterviewProfile {
+  return emptyProfile(company, "Company research was unavailable, so this interview relies on the role and resume.");
+}
+
+async function researchProfile(company: string, jobTitle: string): Promise<CompanyInterviewProfile> {
+  const client = new OpenAI({ maxRetries: 0, timeout: planRequestTimeoutMs });
   const response = await client.responses.create({
     model: planModel(),
     reasoning: planReasoning,
     tools: [{ type: "web_search", search_context_size: "low" }],
     include: ["web_search_call.action.sources"],
     instructions:
-      "Research how this company interviews candidates. Prefer official careers pages, official interview-preparation pages, and official campus-recruiting material. Then recent consistent candidate reports. Treat one anecdote as weak. Do not invent a process, a question, or a date. If evidence is thin or conflicting, say so. Note whether a pattern is company-wide or role-specific.",
+      "Research how this company interviews candidates, then return one cautious profile. Prefer official careers and interview-preparation pages, then recent consistent candidate reports. Treat one anecdote as weak. Do not invent a process, a question, or a date. Use unknown when evidence is missing and low confidence when evidence is thin or conflicting. Do not claim the company always asks something. Only include source URLs that this search actually opened. Use an empty string when a date is unknown. Return at most 5 patterns, 5 competencies, 4 process notes, and 6 sources.",
     input: `Company: ${company}
 Role being prepared: ${jobTitle}
 
-Find credible evidence about the interview process, format, behavioral versus technical versus case emphasis, structured competencies, and recent candidate reports. Distinguish official guidance from anecdotal reports.`,
-  });
-  return {
-    notes: response.output_text?.trim() ?? "",
-    urls: collectUrls(response),
-  };
-}
-
-async function structureProfile(company: string, notes: ResearchNotes): Promise<CompanyInterviewProfile> {
-  const client = new OpenAI({ maxRetries: 0 });
-  const response = await client.responses.create({
-    model: planModel(),
-    reasoning: planReasoning,
-    instructions:
-      "Turn research notes into a cautious company interview profile. Official sources outweigh candidate reports. Recent reports outweigh old ones. Use unknown when evidence is missing. Use low confidence when evidence is thin, conflicting, or only anecdotal. Do not claim the company always asks something. Only include source URLs that appear in the supplied URL list. Use an empty string when a date is unknown. Return at most 5 patterns, 5 competencies, 4 process notes, and 6 sources.",
-    input: `Company: ${company}
-
-Research notes:
-${notes.notes || "No research notes were returned."}
-
-Source URLs:
-${notes.urls.join("\n") || "None"}`,
+Find credible evidence about the interview process, format, behavioral versus technical versus case emphasis, structured competencies, and recent candidate reports.`,
     text: {
       format: {
         type: "json_schema",
@@ -145,6 +128,10 @@ ${notes.urls.join("\n") || "None"}`,
       },
     },
   });
+  const notes: ResearchNotes = {
+    notes: response.output_text?.trim() ?? "",
+    urls: collectUrls(response),
+  };
   const parsed = JSON.parse(response.output_text) as Omit<CompanyInterviewProfile, "company" | "researchedAt">;
   const allowed = new Set(notes.urls);
   const sources = Array.isArray(parsed.sources) ? parsed.sources : [];
@@ -167,11 +154,7 @@ export async function researchCompany(
   if (cached) return cached;
 
   try {
-    const notes = await searchCompany(company, jobTitle);
-    if (!notes.notes && notes.urls.length === 0) {
-      return { profile: emptyProfile(company, "No reliable public interview guidance was found."), cacheHit: false };
-    }
-    const profile = await structureProfile(company, notes);
+    const profile = await researchProfile(company, jobTitle);
     if (!profile.summary.trim()) {
       return { profile: emptyProfile(company, "No reliable public interview guidance was found."), cacheHit: false };
     }
@@ -179,9 +162,6 @@ export async function researchCompany(
     return { profile, cacheHit: false };
   } catch (error) {
     console.error("Company research failed", error instanceof Error ? `${error.name}: ${error.message}` : "error");
-    return {
-      profile: emptyProfile(company, "Company research was unavailable, so this interview relies on the role and resume."),
-      cacheHit: false,
-    };
+    return { profile: unavailableCompanyProfile(company), cacheHit: false };
   }
 }

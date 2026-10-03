@@ -10,7 +10,7 @@ import type {
   InterviewType,
   RoleAnalysis,
 } from "@/lib/interview/types";
-import { planModel, planReasoning } from "@/lib/live/config";
+import { planModel, planReasoning, planRequestTimeoutMs } from "@/lib/live/config";
 
 const blueprintSchema = {
   type: "object",
@@ -122,7 +122,7 @@ export async function buildInterviewBlueprint(
 ): Promise<InterviewBlueprint> {
   const curve = buildDifficultyCurve(role.candidateLevel, role.recommendedInterviewDifficulty);
   const calibration = buildExperienceCalibration(role);
-  const client = new OpenAI({ maxRetries: 0 });
+  const client = new OpenAI({ maxRetries: 0, timeout: planRequestTimeoutMs });
   const response = await client.responses.create({
     model: planModel(),
     reasoning: planReasoning,

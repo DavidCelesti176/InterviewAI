@@ -21,8 +21,9 @@ export function planModel(): string {
   return process.env.OPENAI_PLAN_MODEL?.trim() || DEFAULT_PLAN_MODEL;
 }
 
-/** Planning calls share one function with a 30s platform cutoff, so keep reasoning light. */
-export const planReasoning = { effort: "low" as const };
+/** Each planning request must finish before the 30s platform cutoff. */
+export const planReasoning = { effort: "minimal" as const };
+export const planRequestTimeoutMs = 20_000;
 
 export function analysisModel(): string {
   return process.env.OPENAI_ANALYSIS_MODEL?.trim() || DEFAULT_PLAN_MODEL;

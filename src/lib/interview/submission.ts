@@ -80,3 +80,34 @@ export async function readInterviewSubmission(form: FormData): Promise<Submissio
     },
   };
 }
+
+export function readStoredConfig(value: unknown): InterviewConfig | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const candidate = record.candidate;
+  const resumeText =
+    candidate && typeof candidate === "object" && typeof (candidate as { resumeText?: unknown }).resumeText === "string"
+      ? (candidate as { resumeText: string }).resumeText
+      : "";
+  const company = typeof record.company === "string" ? record.company.trim() : "";
+  const jobTitle = typeof record.jobTitle === "string" ? record.jobTitle.trim() : "";
+  const jobDescription = typeof record.jobDescription === "string" ? record.jobDescription.trim() : "";
+  const interviewType = record.interviewType;
+  const interviewMode = record.interviewMode;
+  const targetDurationMinutes = record.targetDurationMinutes;
+  if (!company || company.length > MAX_COMPANY_CHARS) return null;
+  if (!jobTitle || jobTitle.length > MAX_JOB_TITLE_CHARS) return null;
+  if (jobDescription.length < MIN_JOB_DESCRIPTION_CHARS || jobDescription.length > MAX_JOB_DESCRIPTION_CHARS) return null;
+  if (resumeText.length < MIN_RESUME_TEXT_CHARS || resumeText.length > MAX_RESUME_TEXT_CHARS + 1) return null;
+  if (!interviewTypes.has(interviewType as InterviewType)) return null;
+  if (typeof targetDurationMinutes !== "number" || targetDurationMinutes < 10 || targetDurationMinutes > 60) return null;
+  return {
+    company,
+    jobTitle,
+    jobDescription,
+    interviewType: interviewType as InterviewType,
+    interviewMode: isInterviewMode(interviewMode) ? interviewMode : "mock",
+    targetDurationMinutes,
+    candidate: { resumeText },
+  };
+}

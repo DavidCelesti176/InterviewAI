@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { clampScore } from "@/lib/interview/difficulty";
 import { calibrateJobLevel, clampCandidateProfile, isCandidateProfile } from "@/lib/interview/experience-calibration";
 import type { CandidateLevel, InterviewConfig, RoleAnalysis } from "@/lib/interview/types";
-import { planModel, planReasoning } from "@/lib/live/config";
+import { planModel, planReasoning, planRequestTimeoutMs } from "@/lib/live/config";
 
 const levels: CandidateLevel[] = [
   "intern",
@@ -104,7 +104,7 @@ const roleAnalysisSchema = {
   ],
 } as const;
 
-function isAnalysis(value: unknown): value is RoleAnalysis {
+export function isRoleAnalysis(value: unknown): value is RoleAnalysis {
   if (!value || typeof value !== "object") return false;
   const analysis = value as RoleAnalysis;
   return (
@@ -116,7 +116,7 @@ function isAnalysis(value: unknown): value is RoleAnalysis {
 }
 
 export async function analyzeRole(config: InterviewConfig): Promise<RoleAnalysis> {
-  const client = new OpenAI({ maxRetries: 0 });
+  const client = new OpenAI({ maxRetries: 0, timeout: planRequestTimeoutMs });
   const response = await client.responses.create({
     model: planModel(),
     reasoning: planReasoning,
@@ -143,7 +143,7 @@ ${config.candidate.resumeText}`,
   });
 
   const parsed: unknown = JSON.parse(response.output_text);
-  if (!isAnalysis(parsed) || !parsed.reasoningSummary.trim()) {
+  if (!isRoleAnalysis(parsed) || !parsed.reasoningSummary.trim()) {
     throw new Error("Role analysis was incomplete");
   }
   const leveled = calibrateJobLevel(

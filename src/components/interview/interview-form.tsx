@@ -175,33 +175,57 @@ export function InterviewForm() {
 
     saveInterviewDraft(currentDraft());
     setSubmitting(true);
-    setPrepareSteps(initialPrepareSteps(company));
+    const steps = initialPrepareSteps(company);
+    setPrepareSteps(markStep(steps, "analyzing_resume", "active"));
     let leaving = false;
     try {
-      const response = await fetch("/api/interview/prepare", { method: "POST", body: form });
-      if (response.status === 413) {
+      const intakeResponse = await fetch("/api/interview/prepare?stage=intake", { method: "POST", body: form });
+      if (intakeResponse.status === 413) {
         setError("That PDF is too large for the site. Use a file under 6 MB.");
         return;
       }
-      const contentType = response.headers.get("content-type") ?? "";
-      if (!contentType.includes("ndjson")) {
-        const body: unknown = await response.json().catch(() => null);
-        const message =
-          body && typeof body === "object" && "error" in body && typeof body.error === "string"
-            ? body.error
-            : "The interview plan could not be created. Check the job description and resume, then try again.";
-        setError(message);
+      const intake = await readJsonResponse(intakeResponse);
+      if (!intake.ok || !isIntake(intake.body)) {
+        setError(intake.error || "The interview plan could not be created. Check the job description and resume, then try again.");
         return;
       }
-      const prepared = await readPrepareEvents(response, (step, state) => {
-        setPrepareSteps((current) => current.map((item) => (item.id === step ? { ...item, state } : item)));
+      setPrepareSteps((current) =>
+        markSteps(current, [
+          ["analyzing_resume", "done"],
+          ["understanding_role", "active"],
+          ["researching_company", "active"],
+        ]),
+      );
+      const [roleResult, companyResult] = await Promise.all([
+        postPrepare("role", { config: intake.body.config }),
+        postPrepare("company", { company: intake.body.config.company, jobTitle: intake.body.config.jobTitle }),
+      ]);
+      if (!roleResult.ok || !isRolePayload(roleResult.body)) {
+        setError(roleResult.error || "Preparing the interview was interrupted before it finished. Try again.");
+        return;
+      }
+      setPrepareSteps((current) =>
+        markSteps(current, [
+          ["understanding_role", "done"],
+          ["researching_company", "done"],
+          ["calibrating_difficulty", "done"],
+          ["building_plan", "active"],
+        ]),
+      );
+      const finished = await postPrepare("finish", {
+        config: intake.body.config,
+        resumeFileName: intake.body.resumeFileName,
+        durationChoice: intake.body.durationChoice,
+        roleAnalysis: roleResult.body.roleAnalysis,
+        company: companyResult.ok ? companyResult.body : null,
       });
-      if (prepared.error || !prepared.summary) {
-        setError(prepared.error || "Preparing the interview was interrupted before it finished. Try again.");
+      const summary = finished.ok ? isSummary(finished.body.summary) : null;
+      const debug = finished.ok && isDebug(finished.body.debug) ? finished.body.debug : undefined;
+      if (!summary) {
+        setError(finished.error || "Preparing the interview was interrupted before it finished. Try again.");
         return;
       }
-      if (prepared.debug) savePreparationDebug(prepared.debug);
-      const summary = prepared.summary;
+      if (debug) savePreparationDebug(debug);
       saveInterviewSetup({
         interviewId: summary.interviewId,
         company: summary.company,
@@ -477,6 +501,53 @@ function isExtracted(value: unknown): value is { company: string; jobTitle: stri
   return typeof record.company === "string" && typeof record.jobTitle === "string" && typeof record.jobDescription === "string";
 }
 
+function markStep(steps: PrepareStepState[], id: string, state: PrepareStepState["state"]): PrepareStepState[] {
+  return steps.map((item) => (item.id === id ? { ...item, state } : item));
+}
+
+function markSteps(steps: PrepareStepState[], updates: Array<[string, PrepareStepState["state"]]>): PrepareStepState[] {
+  return updates.reduce((current, [id, state]) => markStep(current, id, state), steps);
+}
+
+async function readJsonResponse(response: Response): Promise<{ ok: boolean; body: Record<string, unknown>; error: string }> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("json")) {
+    return { ok: false, body: {}, error: "Preparing the interview was interrupted before it finished. Try again." };
+  }
+  const body: unknown = await response.json().catch(() => null);
+  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const error = typeof record.error === "string" ? record.error : "";
+  return { ok: response.ok && !error, body: record, error };
+}
+
+function postPrepare(stage: string, payload: unknown) {
+  return fetch(`/api/interview/prepare?stage=${stage}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).then(readJsonResponse);
+}
+
+function isIntake(value: Record<string, unknown>): value is { config: { company: string; jobTitle: string }; resumeFileName: string; durationChoice: string } {
+  const config = value.config;
+  return (
+    !!config &&
+    typeof config === "object" &&
+    typeof (config as { company?: unknown }).company === "string" &&
+    typeof (config as { jobTitle?: unknown }).jobTitle === "string" &&
+    typeof value.resumeFileName === "string" &&
+    typeof value.durationChoice === "string"
+  );
+}
+
+function isRolePayload(value: Record<string, unknown>): value is { roleAnalysis: unknown } {
+  return !!value.roleAnalysis && typeof value.roleAnalysis === "object";
+}
+
+function isDebug(value: unknown): value is PreparationDebug {
+  return !!value && typeof value === "object" && "blueprint" in value;
+}
+
 function initialPrepareSteps(company: string): PrepareStepState[] {
   const name = company.trim() || "the company";
   return [
@@ -486,43 +557,6 @@ function initialPrepareSteps(company: string): PrepareStepState[] {
     { id: "researching_company", label: `Researching ${name}'s interview approach`, state: "pending" },
     { id: "building_plan", label: "Building your interview plan", state: "pending" },
   ];
-}
-
-async function readPrepareEvents(
-  response: Response,
-  onStep: (step: string, state: "active" | "done") => void,
-): Promise<{ summary: ReturnType<typeof isSummary> extends infer T ? T : never; debug?: PreparationDebug; error?: string }> {
-  const reader = response.body?.getReader();
-  if (!reader) return { summary: null, error: "The interview plan could not be created. Check the job description and resume, then try again." };
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let summary: ReturnType<typeof isSummary> = null;
-  let debug: PreparationDebug | undefined;
-  let error = "";
-  while (true) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const event = JSON.parse(line) as {
-        step?: string;
-        state?: "active" | "done";
-        error?: string;
-        summary?: unknown;
-        debug?: PreparationDebug;
-      };
-      if (event.step === "error") error = event.error || error;
-      if (event.step && event.state) onStep(event.step, event.state);
-      if (event.step === "ready") {
-        summary = isSummary(event.summary);
-        if (event.debug?.blueprint) debug = event.debug;
-      }
-    }
-  }
-  return { summary, debug, error };
 }
 
 function isSummary(value: unknown) {

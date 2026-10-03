@@ -1,11 +1,11 @@
-import { analyzeRole } from "@/lib/interview/analyze-role";
+import { analyzeRole, isRoleAnalysis } from "@/lib/interview/analyze-role";
 import { buildInterviewBlueprint, curveFor } from "@/lib/interview/build-blueprint";
 import { levelLabel } from "@/lib/interview/difficulty";
 import { interviewTypeLabel } from "@/lib/interview/labels";
 import { researchCompany } from "@/lib/interview/research-company";
 import { saveInterview } from "@/lib/interview/store";
 import type { InterviewMode } from "@/lib/interview/help-types";
-import type { CompanyInterviewProfile, InterviewConfig, InterviewType, PreparationDebug } from "@/lib/interview/types";
+import type { CompanyInterviewProfile, InterviewConfig, InterviewType, PreparationDebug, RoleAnalysis } from "@/lib/interview/types";
 
 export type PrepareStep = "understanding_role" | "calibrating_difficulty" | "researching_company" | "building_plan";
 
@@ -29,6 +29,60 @@ export function emphasisLabel(profile: CompanyInterviewProfile, interviewType: I
   if (profile.technicalEmphasis === "high" || profile.technicalEmphasis === "medium") return "Technical emphasis";
   if (profile.caseInterviewEmphasis === "high" || profile.caseInterviewEmphasis === "medium") return "Case-style emphasis";
   return interviewTypeLabel(interviewType);
+}
+
+export async function finishPreparedInterview(input: {
+  config: InterviewConfig;
+  resumeFileName: string;
+  durationChoice: string;
+  roleAnalysis: RoleAnalysis;
+  company: { profile: CompanyInterviewProfile; cacheHit: boolean };
+}): Promise<{ summary: PreparationSummary; debug: PreparationDebug }> {
+  const difficultyCurve = curveFor(input.roleAnalysis);
+  const blueprint = await buildInterviewBlueprint(input.config, input.roleAnalysis, input.company.profile);
+
+  const id = crypto.randomUUID();
+  await saveInterview({
+    id,
+    createdAt: Date.now(),
+    resumeFileName: input.resumeFileName,
+    config: input.config,
+    blueprint,
+    debug: {
+      cacheHit: input.company.cacheHit,
+      roleAnalysis: input.roleAnalysis,
+      difficultyCurve,
+      companyProfile: input.company.profile,
+      blueprint,
+    },
+  });
+
+  return {
+    summary: {
+      interviewId: id,
+      company: input.config.company,
+      jobTitle: input.config.jobTitle,
+      interviewType: input.config.interviewType,
+      interviewMode: input.config.interviewMode === "practice" ? "practice" : "mock",
+      interviewTypeLabel: interviewTypeLabel(input.config.interviewType),
+      targetDurationMinutes: input.config.targetDurationMinutes,
+      durationChoice: input.durationChoice,
+      resumeFileName: input.resumeFileName,
+      levelLabel: levelLabel(input.roleAnalysis.candidateLevel),
+      emphasisLabel: emphasisLabel(input.company.profile, input.config.interviewType),
+    },
+    debug: {
+      cacheHit: input.company.cacheHit,
+      roleAnalysis: input.roleAnalysis,
+      difficultyCurve,
+      companyProfile: input.company.profile,
+      blueprint,
+    },
+  };
+}
+
+export function storedRoleAnalysis(value: unknown): RoleAnalysis | null {
+  return isRoleAnalysis(value) ? value : null;
 }
 
 export async function prepareInterview(input: {
