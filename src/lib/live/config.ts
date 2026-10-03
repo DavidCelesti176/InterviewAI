@@ -21,8 +21,8 @@ export function planModel(): string {
   return process.env.OPENAI_PLAN_MODEL?.trim() || DEFAULT_PLAN_MODEL;
 }
 
-/** Each planning request must finish before the 30s platform cutoff. */
-export const planReasoning = { effort: "minimal" as const };
+/** gpt-5.4 accepts none, low, medium, high, and xhigh. None keeps each step inside the platform cutoff. */
+export const planReasoning = { effort: "none" as const };
 export const planRequestTimeoutMs = 20_000;
 
 export function analysisModel(): string {
