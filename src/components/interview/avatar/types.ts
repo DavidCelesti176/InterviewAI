@@ -4,14 +4,25 @@ export type MouthState = "closed" | "small" | "medium" | "wide";
 
 export type VisualPersonality = "warm" | "balanced" | "direct" | "executive";
 
-export interface InterviewerAvatarAssets {
-  base: string;
-  eyesOpen?: string;
-  eyesClosed?: string;
-  mouthClosed?: string;
-  mouthSmall?: string;
-  mouthMedium?: string;
-  mouthWide?: string;
+export type HairStyle = "medium" | "waves" | "crop" | "bob";
+
+export type JawShape = "round" | "defined";
+
+/** Illustrated look only. Swap a character by editing these colors and shapes. */
+export interface CharacterLook {
+  skin: [string, string, string];
+  hair: [string, string];
+  hairStyle: HairStyle;
+  iris: string;
+  lip: string;
+  blazer: [string, string];
+  lapel: [string, string];
+  shirt: string;
+  eyeScale: number;
+  smile: number;
+  jaw: JawShape;
+  blush: number;
+  beard?: boolean;
 }
 
 export interface InterviewerProfile {
@@ -21,6 +32,6 @@ export interface InterviewerProfile {
   styleLabel: string;
   shortDescription: string;
   visualPersonality: VisualPersonality;
-  avatar: InterviewerAvatarAssets;
+  look: CharacterLook;
   voice?: string;
 }

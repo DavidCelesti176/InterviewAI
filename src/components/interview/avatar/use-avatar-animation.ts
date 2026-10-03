@@ -37,7 +37,7 @@ export function useAvatarAnimation(
       const now = performance.now();
       const speaking = stateRef.current === "speaking";
       const target = speaking ? normalizeSpeechLevel(levelRef.current) : 0;
-      display = reduced ? target : display * 0.72 + target * 0.28;
+      display = reduced ? target : display * 0.7 + target * 0.3;
       if (display < 0.008) display = 0;
       const mouth = mouthWeights(display);
       const shape = mouthState(display);
