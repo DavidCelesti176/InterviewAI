@@ -250,7 +250,7 @@ export class InterviewSession {
       if (!token) throw new Error("Sign in to continue.");
       const response = await fetch("/api/session", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-firebase-token": token },
         body: JSON.stringify({ sdp, interviewId, interviewerId }),
       });
       if (generation !== this.generation) return;

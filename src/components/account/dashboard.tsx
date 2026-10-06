@@ -8,6 +8,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/auth-context";
 import { authorizedFetch } from "@/lib/account/client";
+import { deleteOwnedInterview, listOwnedInterviews } from "@/lib/account/interviews";
 import type { InterviewCard, InterviewStatusName } from "@/lib/account/types";
 import { saveInterviewSetup, type InterviewSetup } from "@/lib/interview/browser-state";
 import type { SavedInterviewResult } from "@/lib/interview/browser-state";
@@ -23,18 +24,14 @@ export function Dashboard() {
   const firstName = profile?.firstName || user?.displayName?.split(" ")[0] || "";
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
-    void authorizedFetch("/api/account/interviews")
-      .then(async (response) => {
-        const body = (await response.json().catch(() => null)) as { interviews?: InterviewCard[]; error?: string } | null;
-        if (!response.ok) throw new Error(body?.error || "Interviews could not be loaded.");
-        return body?.interviews ?? [];
-      })
+    void listOwnedInterviews(user.uid)
       .then((items) => {
         if (!cancelled) setInterviews(items);
       })
-      .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Interviews could not be loaded.");
+      .catch(() => {
+        if (!cancelled) setError("Your interviews could not be loaded.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -42,17 +39,14 @@ export function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user]);
 
   async function remove(id: string) {
     setDeleting(true);
     setError("");
     try {
-      const response = await authorizedFetch(`/api/account/interviews/${id}`, { method: "DELETE" });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error || "That interview could not be deleted.");
-      }
+      if (!user) throw new Error("Sign in to continue.");
+      await deleteOwnedInterview(user.uid, id);
       setInterviews((current) => current.filter((item) => item.id !== id));
       setPendingDelete(null);
     } catch (reason) {

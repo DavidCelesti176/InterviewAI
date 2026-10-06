@@ -15,9 +15,7 @@ export class UnauthorizedError extends Error {
 }
 
 export async function requireAuthenticatedUser(request: Request): Promise<AuthenticatedUser> {
-  const header = request.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(\S+)$/i.exec(header);
-  const token = match?.[1]?.trim();
+  const token = bearerToken(request);
   if (!token) throw new UnauthorizedError();
   try {
     const { getAuth } = await import("firebase-admin/auth");
@@ -26,9 +24,27 @@ export async function requireAuthenticatedUser(request: Request): Promise<Authen
     return { uid: decoded.uid, email: typeof decoded.email === "string" ? decoded.email : "" };
   } catch (error) {
     if (error instanceof UnauthorizedError) throw error;
-    if (error instanceof Error && error.message === "Firebase Admin is not configured.") throw error;
+    if (adminUnavailable(error)) throw new Error("Firebase Admin is not configured.");
     throw new UnauthorizedError();
   }
+}
+
+function bearerToken(request: Request): string {
+  const custom = request.headers.get("x-firebase-token") ?? "";
+  const authorization = request.headers.get("authorization") ?? "";
+  const header = custom.trim() || authorization.trim();
+  const match = /^(?:Bearer\s+)?(\S+)$/i.exec(header);
+  return match?.[1]?.trim() ?? "";
+}
+
+function adminUnavailable(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message;
+  return (
+    message === "Firebase Admin is not configured." ||
+    /cannot find module ['"]firebase-admin/i.test(message) ||
+    /could not resolve ['"]firebase-admin/i.test(message)
+  );
 }
 
 export function unauthorizedResponse(): Response {

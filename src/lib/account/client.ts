@@ -7,5 +7,6 @@ export async function authorizedFetch(input: string, init: RequestInit = {}): Pr
   if (!token) throw new Error("Sign in to continue.");
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
+  headers.set("x-firebase-token", token);
   return fetch(input, { ...init, headers });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { browserLocalPersistence, getAuth, setPersistence, type Auth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, onAuthStateChanged, setPersistence, type Auth, type User } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
 export function firebaseClientConfig() {
@@ -53,7 +53,17 @@ export function readyAuth(): Promise<Auth> {
 export async function currentIdToken(): Promise<string | null> {
   if (!firebaseConfigured()) return null;
   const auth = await readyAuth();
-  const user = auth.currentUser;
+  const user = await restoredUser(auth);
   if (!user) return null;
   return user.getIdToken();
+}
+
+function restoredUser(auth: Auth): Promise<User | null> {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
 }
