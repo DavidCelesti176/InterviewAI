@@ -63,8 +63,8 @@ const questionSchema = {
     question: { type: "string" },
     answerSummary: { type: "string" },
     score: { type: "number" },
-    whatWorked: { type: "array", items: { type: "string" } },
-    whatHeldItBack: { type: "array", items: { type: "string" } },
+    whatWorked: { type: "array", items: { type: "string" }, maxItems: 2 },
+    whatHeldItBack: { type: "array", items: { type: "string" }, maxItems: 2 },
     betterApproach: { type: "string" },
     exampleImprovedAnswer: { type: "string" },
     recommendedForPractice: { type: "boolean" },
@@ -101,16 +101,17 @@ const analysisSchema = {
       },
       required: ["communication", "specificity", "structure", "conciseness", "businessImpact", "roleAlignment"],
     },
-    strengths: { type: "array", items: feedbackSchema },
-    focusAreas: { type: "array", items: feedbackSchema },
+    strengths: { type: "array", items: feedbackSchema, maxItems: 2 },
+    focusAreas: { type: "array", items: feedbackSchema, maxItems: 2 },
     strongestMoment: highlightSchema,
     missedOpportunity: highlightSchema,
-    questionFeedback: { type: "array", items: questionSchema },
+    questionFeedback: { type: "array", items: questionSchema, maxItems: 4 },
     quantifiedAnswerCount: { type: "number" },
     totalRelevantAnswers: { type: "number" },
     assistanceNote: { type: "string" },
     practiceRecommendations: {
       type: "array",
+      maxItems: 2,
       items: {
         type: "object",
         additionalProperties: false,
@@ -118,7 +119,7 @@ const analysisSchema = {
           title: { type: "string" },
           reason: { type: "string" },
           priority: { type: "string", enum: ["high", "medium", "low"] },
-          relatedQuestionIds: { type: "array", items: { type: "string" } },
+          relatedQuestionIds: { type: "array", items: { type: "string" }, maxItems: 2 },
         },
         required: ["title", "reason", "priority", "relatedQuestionIds"],
       },
@@ -175,7 +176,7 @@ export async function analyzeInterview(input: {
 
   onStep("evaluating", "active");
   const started = Date.now();
-  const client = new OpenAI({ maxRetries: 0, timeout: 24_000 });
+  const client = new OpenAI({ maxRetries: 0, timeout: 27_000 });
   const model = analysisModel();
   const response = await client.responses.create({
     model,
@@ -219,7 +220,7 @@ export async function analyzeInterview(input: {
 function normalize(model: ModelAnalysis, measured: SpeakingMetrics): InterviewAnalysis {
   const overallReadiness = score(model.overallReadiness);
   const usedIds = new Set<string>();
-  const questions = model.questionFeedback.slice(0, 8).map((item, index) => {
+  const questions = model.questionFeedback.slice(0, 4).map((item, index) => {
     const base = item.id.trim().slice(0, 40) || `q${index + 1}`;
     let id = base;
     let suffix = 2;

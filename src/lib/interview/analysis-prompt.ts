@@ -13,7 +13,7 @@ Do not reward long answers. Do not punish a short answer that was complete. Use 
 
 If the candidate used coaching, do not score that answer as fully unassisted, and do not punish them for asking. Notice whether they applied the help. Practice recommendations can reflect repeated help, such as identifying what a question is testing or structuring an answer. Pauses are not a penalty. For practice mode, emphasize what they learned and where they needed support. For a mock interview, describe the performance without coaching. If a mock included a pause, mention that it was not fully unassisted. Set assistanceNote to one or two sentences about that pattern, or an empty string when no coaching was used.
 
-Write one card for each main question the interviewer asked. Put clarifying follow-ups on that same card. A new topic is a new card.
+Write at most 4 question cards, covering the main questions. Put clarifying follow-ups on that same card. A new topic is a new card. Return at most 2 strengths, 2 focus areas, and 2 practice recommendations. Each list item is one sentence. exampleImprovedAnswer is at most two sentences.
 
 Each score must match its explanation. Use whole numbers.
 
@@ -56,10 +56,10 @@ Role topics: ${topics || "None listed"}
 ${company}
 
 Job description:
-${clip(config.jobDescription, 8000)}
+${clip(config.jobDescription, 2500)}
 
 Resume context:
-${clip(config.candidate.resumeText, 6000)}
+${clip(config.candidate.resumeText, 2500)}
 
 Transcript:
 ${formatTranscript(turns)}`;
