@@ -27,30 +27,16 @@ export async function requireAuthenticatedUser(request: Request): Promise<Authen
   } catch (error) {
     if (error instanceof UnauthorizedError) throw error;
     if (adminUnavailable(error)) throw new Error("Firebase Admin is not configured.");
-    throw new UnauthorizedError(safeReason(error));
+    throw new UnauthorizedError("rejected");
   }
 }
 
 function bearerToken(request: Request): string {
   const custom = request.headers.get("x-firebase-token") ?? "";
   const authorization = request.headers.get("authorization") ?? "";
-  const header = custom.trim() || authorization.trim() || readCookie(request, "firebase-token");
+  const header = custom.trim() || authorization.trim();
   const match = /^(?:Bearer\s+)?(\S+)$/i.exec(header);
   return match?.[1]?.trim() ?? "";
-}
-
-function readCookie(request: Request, name: string): string {
-  const raw = request.headers.get("cookie") ?? "";
-  for (const part of raw.split(";")) {
-    const [key, ...rest] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(rest.join("="));
-  }
-  return "";
-}
-
-function safeReason(error: unknown): string {
-  if (!(error instanceof Error)) return "unknown";
-  return error.message.replace(/-----BEGIN[\s\S]*?-----END [^-]+-----/g, "[redacted]").slice(0, 160);
 }
 
 function adminUnavailable(error: unknown): boolean {
@@ -63,18 +49,8 @@ function adminUnavailable(error: unknown): boolean {
   );
 }
 
-export function unauthorizedResponse(request?: Request, reason = "unauthorized"): Response {
-  const cookie = request?.headers.get("cookie") ?? "";
-  return Response.json(
-    {
-      error: "Sign in to continue.",
-      reason,
-      sawAuthorization: Boolean(request?.headers.get("authorization")),
-      sawFirebaseToken: Boolean(request?.headers.get("x-firebase-token")),
-      sawCookie: cookie.includes("firebase-token="),
-    },
-    { status: 401 },
-  );
+export function unauthorizedResponse(): Response {
+  return Response.json({ error: "Sign in to continue." }, { status: 401 });
 }
 
 export function unavailableAccountResponse(): Response {
@@ -88,8 +64,7 @@ export async function authenticate(request: Request): Promise<AuthenticatedUser 
     if (error instanceof Error && error.message === "Firebase Admin is not configured.") {
       return unavailableAccountResponse();
     }
-    const reason = error instanceof UnauthorizedError ? error.reason : "unauthorized";
-    return unauthorizedResponse(request, reason);
+    return unauthorizedResponse();
   }
 }
 

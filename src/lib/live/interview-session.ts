@@ -248,12 +248,9 @@ export class InterviewSession {
 
       const token = await currentIdToken();
       if (!token) throw new Error("Sign in to continue.");
-      const { rememberFirebaseToken } = await import("@/lib/account/client");
-      rememberFirebaseToken(token);
       const response = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-firebase-token": token },
-        credentials: "same-origin",
         body: JSON.stringify({ sdp, interviewId, interviewerId }),
       });
       if (generation !== this.generation) return;
