@@ -176,7 +176,7 @@ export async function analyzeInterview(input: {
 
   onStep("evaluating", "active");
   const started = Date.now();
-  const client = new OpenAI({ maxRetries: 0, timeout: 27_000 });
+  const client = new OpenAI({ maxRetries: 0, timeout: 25_000 });
   const model = analysisModel();
   const response = await client.responses.create({
     model,

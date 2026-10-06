@@ -73,6 +73,7 @@ export async function POST(request: Request) {
   const turns = readTurns(payload.turns);
   if (!turns) return jsonError("There isn't enough of the conversation to review.", 400);
 
+  console.info("Interview analysis started", payload.interviewId.trim());
   const interview = await getInterview(payload.interviewId.trim());
   if (!interview) {
     return jsonError("This interview is no longer available on the server. Your transcript is still saved in this browser.", 404);

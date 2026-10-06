@@ -1,6 +1,7 @@
 const DEFAULT_LIVE_MODEL = "gpt-live-1";
 const DEFAULT_VOICE = "meridian";
 const DEFAULT_PLAN_MODEL = "gpt-5.4";
+const DEFAULT_ANALYSIS_MODEL = "gpt-5.4-mini";
 
 export type LiveSessionSettings = {
   model: string;
@@ -26,7 +27,7 @@ export const planReasoning = { effort: "none" as const };
 export const planRequestTimeoutMs = 20_000;
 
 export function analysisModel(): string {
-  return process.env.OPENAI_ANALYSIS_MODEL?.trim() || DEFAULT_PLAN_MODEL;
+  return process.env.OPENAI_ANALYSIS_MODEL?.trim() || DEFAULT_ANALYSIS_MODEL;
 }
 
 export function coachingModel(): string {

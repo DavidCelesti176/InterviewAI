@@ -71,8 +71,8 @@ function formatTranscript(turns: InterviewTurn[]): string {
     return `[${clock(turn.timestampMs)} ${speaker}] ${turn.text}`;
   });
   const text = lines.join("\n");
-  if (text.length <= 50000) return text;
-  return `${text.slice(0, 20000)}\n[Earlier middle of the interview omitted]\n${text.slice(-25000)}`;
+  if (text.length <= 12000) return text;
+  return `${text.slice(0, 6000)}\n[Earlier middle of the interview omitted]\n${text.slice(-5000)}`;
 }
 
 function clock(ms: number): string {
