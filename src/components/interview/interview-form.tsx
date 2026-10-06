@@ -72,7 +72,11 @@ export function InterviewForm() {
         return body.resumes ?? [];
       })
       .then((items) => {
-        if (!cancelled) setSavedResumes(items);
+        if (cancelled) return;
+        setSavedResumes(items);
+        const preferred = preferredResume(items);
+        if (!preferred || resumeRef.current?.files?.[0]) return;
+        setSelectedResumeId((current) => current || preferred.id);
       })
       .catch(() => undefined);
     return () => {
@@ -157,7 +161,11 @@ export function InterviewForm() {
     setError(null);
   }
 
-  function roleReady() {
+  function preferredResume(items: ResumeCard[]): ResumeCard | undefined {
+    return [...items].sort((a, b) => (b.lastUsedAt ?? b.updatedAt) - (a.lastUsedAt ?? a.updatedAt))[0];
+  }
+
+function roleReady() {
     return Boolean(company.trim() && jobTitle.trim() && jobDescription.trim().length >= MIN_JOB_DESCRIPTION_CHARS);
   }
 
@@ -171,8 +179,12 @@ export function InterviewForm() {
       return;
     }
     if (step === 1 && !selectedResumeId && !resumeRef.current?.files?.[0]) {
-      setError("Upload your resume PDF or choose a saved one.");
-      return;
+      const saved = preferredResume(savedResumes);
+      if (!saved) {
+        setError("Upload your resume PDF or choose a saved one.");
+        return;
+      }
+      setSelectedResumeId(saved.id);
     }
     setError(null);
     setStep((current) => Math.min(current + 1, 2));
@@ -336,14 +348,19 @@ export function InterviewForm() {
                     <button
                       key={resume.id}
                       type="button"
-                      className={`rounded-[14px] border px-4 py-3 text-left ${selectedResumeId === resume.id ? "border-accent bg-white" : "border-line bg-card"}`}
+                      aria-pressed={selectedResumeId === resume.id}
+                      className={`rounded-[14px] border px-4 py-3 text-left ${selectedResumeId === resume.id ? "border-accent bg-accent/5" : "border-line bg-card"}`}
                       onClick={() => {
                         setSelectedResumeId(resume.id);
                         setResumeName(resume.originalFileName);
                         if (resumeRef.current) resumeRef.current.value = "";
+                        setError(null);
                       }}
                     >
-                      <span className="block text-sm font-medium">{resume.originalFileName}</span>
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="block text-sm font-medium">{resume.originalFileName}</span>
+                        {selectedResumeId === resume.id ? <span className="text-xs font-medium text-accent">Selected</span> : null}
+                      </span>
                       <span className="block text-xs text-muted">
                         {resume.lastUsedAt ? `Last used ${new Date(resume.lastUsedAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}` : "Saved resume"}
                       </span>
