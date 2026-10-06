@@ -1,5 +1,4 @@
-import { getFirestore, type CollectionReference, type DocumentData, type Firestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
+import type { CollectionReference, DocumentData, Firestore } from "firebase-admin/firestore";
 
 import type { InterviewCard, InterviewStatusName, ResumeCard, UserProfile } from "@/lib/account/types";
 import type { InterviewAnalysis } from "@/lib/interview/analysis-types";
@@ -8,6 +7,16 @@ import type { InterviewAssistanceEvent, InterviewPauseEvent } from "@/lib/interv
 import type { StoredInterview } from "@/lib/interview/store";
 import type { DurationChoice, InterviewTurn } from "@/lib/interview/types";
 import { getAdminApp } from "@/lib/firebase/admin";
+
+async function database(): Promise<Firestore> {
+  const { getFirestore } = await import("firebase-admin/firestore");
+  return getFirestore(await getAdminApp());
+}
+
+async function storageBucket(bucketName: string) {
+  const { getStorage } = await import("firebase-admin/storage");
+  return getStorage(await getAdminApp()).bucket(bucketName);
+}
 
 const STATUSES = new Set<InterviewStatusName>([
   "draft",
@@ -19,12 +28,8 @@ const STATUSES = new Set<InterviewStatusName>([
   "failed",
 ]);
 
-function database(): Firestore {
-  return getFirestore(getAdminApp());
-}
-
-function interviewRef(uid: string, interviewId: string) {
-  return database().doc(`users/${uid}/interviews/${interviewId}`);
+async function interviewRef(uid: string, interviewId: string) {
+  return (await database()).doc(`users/${uid}/interviews/${interviewId}`);
 }
 
 function plain<T>(value: T): T {
@@ -57,7 +62,7 @@ export async function saveUserProfile(
   user: { uid: string; email: string },
   input: { firstName: string; lastName: string },
 ): Promise<UserProfile> {
-  const ref = database().doc(`users/${user.uid}`);
+  const ref = (await database()).doc(`users/${user.uid}`);
   const existing = await ref.get();
   const now = Date.now();
   const firstName = input.firstName.trim().slice(0, 40);
@@ -76,7 +81,7 @@ export async function saveUserProfile(
 }
 
 export async function readUserProfile(uid: string): Promise<UserProfile | null> {
-  const snap = await database().doc(`users/${uid}`).get();
+  const snap = await (await database()).doc(`users/${uid}`).get();
   if (!snap.exists) return null;
   const data = snap.data() ?? {};
   if (typeof data.firstName !== "string" || typeof data.email !== "string") return null;
@@ -100,7 +105,7 @@ export async function createPreparingInterview(input: {
   config: StoredInterview["config"];
 }): Promise<void> {
   const now = Date.now();
-  await interviewRef(input.uid, input.interviewId).set({
+  await (await interviewRef(input.uid, input.interviewId)).set({
     userId: input.uid,
     company: input.config.company,
     jobTitle: input.config.jobTitle,
@@ -140,7 +145,7 @@ export async function saveInterview(
     interviewerProfileId?: string;
   },
 ): Promise<void> {
-  const ref = interviewRef(uid, interview.id);
+  const ref = await interviewRef(uid, interview.id);
   const existing = await ref.get();
   const now = Date.now();
   const previous = existing.data() ?? {};
@@ -178,7 +183,7 @@ export async function saveInterview(
 
 export async function getInterview(uid: string, id: string): Promise<StoredInterview | null> {
   if (!isRecordId(id)) return null;
-  const snap = await interviewRef(uid, id).get();
+  const snap = await (await interviewRef(uid, id)).get();
   if (!snap.exists) return null;
   const record = snap.get("record");
   return isStoredInterview(record) ? record : null;
@@ -186,7 +191,7 @@ export async function getInterview(uid: string, id: string): Promise<StoredInter
 
 export async function markInterviewStarted(uid: string, interviewId: string, interviewerId: string): Promise<void> {
   if (!isRecordId(interviewId)) return;
-  const ref = interviewRef(uid, interviewId);
+  const ref = await interviewRef(uid, interviewId);
   const snap = await ref.get();
   if (!snap.exists) return;
   const now = Date.now();
@@ -203,7 +208,7 @@ export async function markInterviewStarted(uid: string, interviewId: string, int
 
 export async function setInterviewer(uid: string, interviewId: string, interviewerProfileId: string): Promise<boolean> {
   if (!isRecordId(interviewId)) return false;
-  const ref = interviewRef(uid, interviewId);
+  const ref = await interviewRef(uid, interviewId);
   const snap = await ref.get();
   if (!snap.exists) return false;
   await ref.set({ interviewerProfileId, updatedAt: Date.now() }, { merge: true });
@@ -211,7 +216,7 @@ export async function setInterviewer(uid: string, interviewId: string, interview
 }
 
 export async function listInterviews(uid: string): Promise<InterviewCard[]> {
-  const snap = await database().collection(`users/${uid}/interviews`).orderBy("createdAt", "desc").limit(30).get();
+  const snap = await (await database()).collection(`users/${uid}/interviews`).orderBy("createdAt", "desc").limit(30).get();
   return snap.docs.map((doc) => {
     const data = doc.data();
     return {
@@ -234,7 +239,7 @@ export async function listInterviews(uid: string): Promise<InterviewCard[]> {
 
 export async function readInterviewResult(uid: string, interviewId: string): Promise<SavedInterviewResult | null> {
   if (!isRecordId(interviewId)) return null;
-  const snap = await interviewRef(uid, interviewId).get();
+  const snap = await (await interviewRef(uid, interviewId)).get();
   if (!snap.exists) return null;
   const data = snap.data() ?? {};
   const turns = await readTurns(uid, interviewId);
@@ -283,7 +288,7 @@ function setupFrom(interviewId: string, data: DocumentData): SavedInterviewResul
 }
 
 async function readTurns(uid: string, interviewId: string): Promise<InterviewTurn[]> {
-  const snap = await interviewRef(uid, interviewId).collection("turns").orderBy("sequence", "asc").limit(200).get();
+  const snap = await (await interviewRef(uid, interviewId)).collection("turns").orderBy("sequence", "asc").limit(200).get();
   const turns: InterviewTurn[] = [];
   for (const doc of snap.docs) {
     const data = doc.data();
@@ -301,7 +306,7 @@ async function readTurns(uid: string, interviewId: string): Promise<InterviewTur
 }
 
 async function readAnalysis(uid: string, interviewId: string): Promise<InterviewAnalysis | null> {
-  const snap = await interviewRef(uid, interviewId).collection("analysis").doc("main").get();
+  const snap = await (await interviewRef(uid, interviewId)).collection("analysis").doc("main").get();
   if (!snap.exists) return null;
   const data = snap.data() ?? {};
   if (typeof data.overallReadiness !== "number" || typeof data.summary !== "string" || !data.categoryScores) return null;
@@ -340,11 +345,11 @@ export async function saveInterviewProgress(
   },
 ): Promise<boolean> {
   if (!isRecordId(interviewId)) return false;
-  const ref = interviewRef(uid, interviewId);
+  const ref = await interviewRef(uid, interviewId);
   const snap = await ref.get();
   if (!snap.exists) return false;
   const now = Date.now();
-  const batch = database().batch();
+  const batch = (await database()).batch();
   input.turns.slice(0, 200).forEach((turn, index) => {
     const id = turn.id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80) || `turn-${index + 1}`;
     batch.set(
@@ -380,7 +385,7 @@ export async function saveInterviewProgress(
 
 export async function appendAssistance(uid: string, interviewId: string, event: InterviewAssistanceEvent): Promise<void> {
   if (!isRecordId(interviewId)) return;
-  const ref = interviewRef(uid, interviewId);
+  const ref = await interviewRef(uid, interviewId);
   const snap = await ref.get();
   if (!snap.exists) return;
   const current = readAssistance(snap.get("assistance"));
@@ -400,7 +405,7 @@ export async function saveInterviewAnalysis(
   metadata?: { model?: string },
 ): Promise<boolean> {
   if (!isRecordId(interviewId)) return false;
-  const ref = interviewRef(uid, interviewId);
+  const ref = await interviewRef(uid, interviewId);
   const snap = await ref.get();
   if (!snap.exists) return false;
   const now = Date.now();
@@ -425,7 +430,7 @@ export async function saveInterviewAnalysis(
 
 export async function deleteInterview(uid: string, interviewId: string): Promise<boolean> {
   if (!isRecordId(interviewId)) return false;
-  const ref = interviewRef(uid, interviewId);
+  const ref = await interviewRef(uid, interviewId);
   const snap = await ref.get();
   if (!snap.exists) return false;
   await deleteDocs(ref.collection("turns"));
@@ -438,7 +443,7 @@ export async function deleteInterview(uid: string, interviewId: string): Promise
 async function deleteDocs(collection: CollectionReference): Promise<void> {
   const snap = await collection.limit(200).get();
   if (snap.empty) return;
-  const batch = database().batch();
+  const batch = (await database()).batch();
   snap.docs.forEach((doc) => batch.delete(doc.ref));
   await batch.commit();
   if (snap.size === 200) await deleteDocs(collection);
@@ -454,13 +459,13 @@ export async function saveResumeFile(input: {
   const storagePath = `users/${input.uid}/resumes/${id}/resume.pdf`;
   const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
   if (!bucketName) throw new Error("Firebase Storage is not configured.");
-  await getStorage(getAdminApp()).bucket(bucketName).file(storagePath).save(Buffer.from(input.bytes), {
+  await (await storageBucket(bucketName)).file(storagePath).save(Buffer.from(input.bytes), {
     contentType: "application/pdf",
     resumable: false,
     metadata: { contentType: "application/pdf" },
   });
   const now = Date.now();
-  await database().doc(`users/${input.uid}/resumes/${id}`).set({
+  await (await database()).doc(`users/${input.uid}/resumes/${id}`).set({
     originalFileName: input.fileName.slice(0, 180),
     storagePath,
     parsedText: input.parsedText,
@@ -476,7 +481,7 @@ export async function getResume(
   resumeId: string,
 ): Promise<{ originalFileName: string; parsedText: string } | null> {
   if (!isRecordId(resumeId)) return null;
-  const snap = await database().doc(`users/${uid}/resumes/${resumeId}`).get();
+  const snap = await (await database()).doc(`users/${uid}/resumes/${resumeId}`).get();
   if (!snap.exists) return null;
   const parsedText = text(snap.get("parsedText"), 12_001);
   const originalFileName = text(snap.get("originalFileName"), 180);
@@ -486,11 +491,11 @@ export async function getResume(
 
 export async function touchResume(uid: string, resumeId: string): Promise<void> {
   if (!isRecordId(resumeId)) return;
-  await database().doc(`users/${uid}/resumes/${resumeId}`).set({ lastUsedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+  await (await database()).doc(`users/${uid}/resumes/${resumeId}`).set({ lastUsedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
 }
 
 export async function listResumes(uid: string): Promise<ResumeCard[]> {
-  const snap = await database().collection(`users/${uid}/resumes`).orderBy("updatedAt", "desc").limit(20).get();
+  const snap = await (await database()).collection(`users/${uid}/resumes`).orderBy("updatedAt", "desc").limit(20).get();
   return snap.docs.map((doc) => {
     const data = doc.data();
     return {
@@ -505,14 +510,14 @@ export async function listResumes(uid: string): Promise<ResumeCard[]> {
 
 export async function deleteResume(uid: string, resumeId: string): Promise<boolean> {
   if (!isRecordId(resumeId)) return false;
-  const ref = database().doc(`users/${uid}/resumes/${resumeId}`);
+  const ref = (await database()).doc(`users/${uid}/resumes/${resumeId}`);
   const snap = await ref.get();
   if (!snap.exists) return false;
   const storagePath = text(snap.get("storagePath"), 300);
   if (storagePath.startsWith(`users/${uid}/`)) {
     const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
     if (bucketName) {
-      await getStorage(getAdminApp()).bucket(bucketName).file(storagePath).delete({ ignoreNotFound: true }).catch(() => undefined);
+      await (await storageBucket(bucketName)).file(storagePath).delete({ ignoreNotFound: true }).catch(() => undefined);
     }
   }
   await ref.delete();

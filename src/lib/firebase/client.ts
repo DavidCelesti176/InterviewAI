@@ -2,6 +2,7 @@
 
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { browserLocalPersistence, getAuth, setPersistence, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
 
 export function firebaseClientConfig() {
   return {
@@ -32,6 +33,10 @@ export function firebaseApp(): FirebaseApp {
 
 export function firebaseAuth(): Auth {
   return getAuth(firebaseApp());
+}
+
+export function clientFirestore(): Firestore {
+  return getFirestore(firebaseApp());
 }
 
 export function readyAuth(): Promise<Auth> {

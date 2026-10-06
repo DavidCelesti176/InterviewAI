@@ -3,8 +3,8 @@
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { readAccountProfile } from "@/lib/account/profile";
 import type { UserProfile } from "@/lib/account/types";
-import { authorizedFetch } from "@/lib/account/client";
 import { firebaseConfigured, readyAuth } from "@/lib/firebase/client";
 
 type AuthState = {
@@ -54,12 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    void authorizedFetch("/api/account/profile")
-      .then(async (response) => {
-        if (!response.ok) return null;
-        const body = (await response.json()) as { profile?: UserProfile };
-        return body.profile ?? null;
-      })
+    void readAccountProfile(user.uid)
       .then((next) => {
         if (!cancelled) setProfile(next);
       })
@@ -77,10 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       refreshProfile: async () => {
         if (!user) return;
-        const response = await authorizedFetch("/api/account/profile");
-        if (!response.ok) return;
-        const body = (await response.json()) as { profile?: UserProfile };
-        setProfile(body.profile ?? null);
+        setProfile(await readAccountProfile(user.uid));
       },
     }),
     [configured, profile, ready, user],

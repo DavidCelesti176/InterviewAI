@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Field, TextInput } from "@/components/ui/field";
 import { useAuth } from "@/contexts/auth-context";
 import { authorizedFetch } from "@/lib/account/client";
+import { upsertAccountProfile } from "@/lib/account/profile";
 import type { ResumeCard } from "@/lib/account/types";
 import { authErrorMessage } from "@/lib/account/auth-errors";
 import { readyAuth } from "@/lib/firebase/client";
@@ -51,13 +52,8 @@ export function AccountPage() {
     setMessage("");
     setSaving(true);
     try {
-      const response = await authorizedFetch("/api/account/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName }),
-      });
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) throw new Error(body?.error || "Your name could not be saved.");
+      if (!user) throw new Error("Sign in to continue.");
+      await upsertAccountProfile(user, { firstName: firstName.trim(), lastName: lastName.trim() });
       await refreshProfile();
       setMessage("Name saved.");
     } catch (reason) {

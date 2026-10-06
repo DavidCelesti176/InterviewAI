@@ -1,4 +1,4 @@
-import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import type { App } from "firebase-admin/app";
 
 const APP_NAME = "interviewai-admin";
 
@@ -14,7 +14,8 @@ function privateKey(): string {
   return (process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
 }
 
-export function getAdminApp(): App {
+export async function getAdminApp(): Promise<App> {
+  const { cert, getApps, initializeApp } = await import("firebase-admin/app");
   const existing = getApps().find((app) => app.name === APP_NAME);
   if (existing) return existing;
   if (!adminConfigured()) {

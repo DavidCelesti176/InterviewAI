@@ -10,9 +10,9 @@ import { AuthDivider, GoogleSignInButton } from "@/components/auth/google-sign-i
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { useAuth } from "@/contexts/auth-context";
-import { authorizedFetch } from "@/lib/account/client";
-import { authErrorMessage, passwordProblem, safeNextPath } from "@/lib/account/auth-errors";
+import { authErrorEmail, authErrorMessage, passwordProblem, safeNextPath } from "@/lib/account/auth-errors";
 import { signInWithGoogle } from "@/lib/account/google";
+import { upsertAccountProfile } from "@/lib/account/profile";
 import { readyAuth } from "@/lib/firebase/client";
 
 export function SignupForm() {
@@ -47,6 +47,8 @@ export function SignupForm() {
       router.replace(next);
     } catch (reason) {
       started.current = false;
+      const conflictEmail = authErrorEmail(reason);
+      if (conflictEmail) setEmail(conflictEmail);
       setError(authErrorMessage(reason, reason instanceof Error ? reason.message : "Could not continue with Google."));
       setBusy(null);
     }
@@ -79,15 +81,7 @@ export function SignupForm() {
       const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const displayName = `${firstName.trim()} ${lastName.trim()}`;
       await updateProfile(credential.user, { displayName });
-      const response = await authorizedFetch("/api/account/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim() }),
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error || "Your account was created, but the profile could not be saved.");
-      }
+      await upsertAccountProfile(credential.user, { firstName: firstName.trim(), lastName: lastName.trim() });
       await refreshProfile();
       void sendEmailVerification(credential.user).catch(() => undefined);
       router.replace(next);

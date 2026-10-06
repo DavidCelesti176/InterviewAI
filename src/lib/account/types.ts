@@ -37,6 +37,7 @@ export type UserProfile = {
   firstName: string;
   lastName: string;
   displayName: string;
+  photoURL?: string;
   createdAt: number;
   updatedAt: number;
 };

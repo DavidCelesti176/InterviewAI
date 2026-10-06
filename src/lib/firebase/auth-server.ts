@@ -1,5 +1,3 @@
-import { getAuth } from "firebase-admin/auth";
-
 import { getAdminApp } from "@/lib/firebase/admin";
 
 export type AuthenticatedUser = {
@@ -22,7 +20,8 @@ export async function requireAuthenticatedUser(request: Request): Promise<Authen
   const token = match?.[1]?.trim();
   if (!token) throw new UnauthorizedError();
   try {
-    const decoded = await getAuth(getAdminApp()).verifyIdToken(token);
+    const { getAuth } = await import("firebase-admin/auth");
+    const decoded = await getAuth(await getAdminApp()).verifyIdToken(token);
     if (!decoded.uid) throw new UnauthorizedError();
     return { uid: decoded.uid, email: typeof decoded.email === "string" ? decoded.email : "" };
   } catch (error) {

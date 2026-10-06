@@ -23,7 +23,9 @@ export function authErrorMessage(error: unknown, fallback = "Something went wron
     case "auth/popup-blocked":
       return "The browser blocked the Google window. Allow popups and try again.";
     case "auth/account-exists-with-different-credential":
-      return "That email already uses a password. Sign in with email instead.";
+      return "That email already uses a password. Sign in with email to keep your interviews, then Google can be connected to that same account.";
+    case "permission-denied":
+      return "You are signed in, but the account profile could not be saved.";
     case "auth/unauthorized-domain":
       return "This site is not allowed to use Google sign-in yet.";
     default:
@@ -36,6 +38,13 @@ export function passwordProblem(password: string, confirm: string): string | nul
   if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Use at least one letter and one number.";
   if (password !== confirm) return "Those passwords don't match.";
   return null;
+}
+
+export function authErrorEmail(error: unknown): string {
+  if (error && typeof error === "object" && "email" in error && typeof (error as { email: unknown }).email === "string") {
+    return (error as { email: string }).email;
+  }
+  return "";
 }
 
 export function safeNextPath(value: string | null): string {

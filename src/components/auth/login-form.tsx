@@ -10,8 +10,8 @@ import { AuthDivider, GoogleSignInButton } from "@/components/auth/google-sign-i
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { useAuth } from "@/contexts/auth-context";
-import { authErrorMessage, safeNextPath } from "@/lib/account/auth-errors";
-import { signInWithGoogle } from "@/lib/account/google";
+import { authErrorEmail, authErrorMessage, safeNextPath } from "@/lib/account/auth-errors";
+import { linkPendingGoogleAccount, signInWithGoogle } from "@/lib/account/google";
 import { readyAuth } from "@/lib/firebase/client";
 
 export function LoginForm() {
@@ -43,6 +43,8 @@ export function LoginForm() {
       router.replace(next);
     } catch (reason) {
       googlePending.current = false;
+      const conflictEmail = authErrorEmail(reason);
+      if (conflictEmail) setEmail(conflictEmail);
       setError(authErrorMessage(reason, reason instanceof Error ? reason.message : "Could not sign in with Google."));
       setBusy(null);
     }
@@ -62,7 +64,8 @@ export function LoginForm() {
     setBusy("email");
     try {
       const auth = await readyAuth();
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      await linkPendingGoogleAccount(credential.user).catch(() => undefined);
       router.replace(next);
     } catch (reason) {
       setError(authErrorMessage(reason, "Could not sign in. Try again."));
