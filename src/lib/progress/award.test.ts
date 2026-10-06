@@ -8,6 +8,7 @@ import {
   emptySkills,
   journeyFrom,
   levelForXp,
+  levelSpan,
   localDay,
   readinessFromScores,
   storytellingScore,
@@ -30,6 +31,9 @@ test("levels follow the XP thresholds and never use a lower title", () => {
   assert.deepEqual(levelForXp(540), { level: 6, title: "Composed" });
   assert.deepEqual(levelForXp(759), { level: 6, title: "Composed" });
   assert.deepEqual(levelForXp(760), { level: 7, title: "Composed" });
+  assert.deepEqual(levelSpan(0), { level: 1, title: "Foundations", start: 0, next: 50 });
+  assert.deepEqual(levelSpan(540), { level: 6, title: "Composed", start: 540, next: 760 });
+  assert.deepEqual(levelSpan(760), { level: 7, title: "Composed", start: 760, next: 980 });
 });
 
 test("the same award cannot be claimed twice", () => {

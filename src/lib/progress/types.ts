@@ -97,4 +97,5 @@ export type ProgressView = {
   highlightedStage: JourneyId;
   completedStages: number;
   newestAchievement: { id: string; label: string } | null;
+  achievementCount: number;
 };

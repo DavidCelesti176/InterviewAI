@@ -135,6 +135,18 @@ export function levelForXp(xp: number): { level: number; title: string } {
   return { level, title };
 }
 
+export function levelSpan(xp: number): { level: number; title: string; start: number; next: number } {
+  const value = Math.max(0, Math.floor(xp));
+  const current = levelForXp(value);
+  if (value < 540) {
+    const index = Math.max(0, current.level - 1);
+    return { ...current, start: LEVELS[index]?.xp ?? 0, next: LEVELS[index + 1]?.xp ?? 540 };
+  }
+  const steps = Math.floor((value - 540) / 220);
+  const start = 540 + steps * 220;
+  return { ...current, start, next: start + 220 };
+}
+
 export function localDay(now: number, timeZone: string): string {
   const zone = safeTimeZone(timeZone);
   const parts = new Intl.DateTimeFormat("en-US", {

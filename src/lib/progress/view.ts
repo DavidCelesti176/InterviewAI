@@ -29,5 +29,6 @@ export function presentProgress(state: ProgressState, day: string): ProgressView
     highlightedStage: highlightedStage(current.journey),
     completedStages: journey.filter((stage) => stage.state === "complete").length,
     newestAchievement: newestAchievement(current.achievements),
+    achievementCount: Object.keys(current.achievements).length,
   };
 }

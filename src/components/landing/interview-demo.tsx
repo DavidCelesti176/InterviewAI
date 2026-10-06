@@ -10,12 +10,12 @@ const claire = interviewerProfiles.find((profile) => profile.id === "claire") ??
 const frames = [
   {
     mode: "speaking" as const,
-    line: "You mentioned building Tableau dashboards at Prasco. What business problem were you trying to solve?",
+    line: "You mentioned building dashboards for the sales team. What business problem were you trying to solve?",
     reply: "",
   },
   {
     mode: "listening" as const,
-    line: "You mentioned building Tableau dashboards at Prasco. What business problem were you trying to solve?",
+    line: "You mentioned building dashboards for the sales team. What business problem were you trying to solve?",
     reply: "The team needed a faster way to see which accounts were slipping before the weekly pricing review.",
   },
   {
@@ -80,7 +80,7 @@ function DemoCard({
   return (
     <figure
       className="overflow-hidden rounded-[24px] border border-white/15 bg-card text-foreground shadow-[0_30px_70px_rgba(0,0,0,0.32)]"
-      aria-label="Example of a live interview. Claire asks about Tableau work at Prasco, hears the answer, then follows up on how the analysis was used."
+      aria-label="Example of a live interview. Claire asks about dashboard work on your resume, hears the answer, then follows up on how the analysis was used."
     >
       <figcaption className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
         <span className="text-sm font-medium">Live practice</span>
@@ -88,9 +88,9 @@ function DemoCard({
       </figcaption>
       <div className="flex flex-col gap-4 p-4 sm:p-5">
         <div className="flex flex-wrap gap-2">
-          <Chip>Resume · Prasco</Chip>
+          <Chip>Resume · Your experience</Chip>
           <Chip>Role · Sales Analyst</Chip>
-          <Chip>Company · Northline</Chip>
+          <Chip>Company · The posting</Chip>
         </div>
         <div className="flex items-center gap-3">
           <div

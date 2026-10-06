@@ -1,7 +1,7 @@
 const sources = [
   {
     kicker: "Your resume",
-    items: ["Prasco", "ServiceWizard", "Coldstream"],
+    items: ["Reporting tools", "A software product", "A service business"],
   },
   {
     kicker: "The job",
@@ -9,7 +9,7 @@ const sources = [
   },
   {
     kicker: "The company",
-    items: ["Northline", "Revenue operations", "Account reviews"],
+    items: ["Revenue operations", "Account reviews", "Weekly reporting"],
   },
 ];
 
@@ -55,7 +55,7 @@ export function PersonalizationFlow() {
       <div className="overflow-hidden rounded-[24px] bg-room text-white shadow-[0_20px_50px_rgba(12,18,32,0.18)]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4 sm:px-6">
           <p className="text-sm font-medium">Your interview</p>
-          <p className="text-xs tracking-wide text-white/60 uppercase">Northline · Sales Analyst</p>
+          <p className="text-xs tracking-wide text-white/60 uppercase">Sales Analyst</p>
         </div>
         <div className="grid gap-5 px-5 py-5 sm:px-6 sm:py-6">
           <div>
@@ -67,7 +67,7 @@ export function PersonalizationFlow() {
           <div className="border-t border-white/10 pt-5">
             <p className="text-xs font-medium tracking-[0.16em] text-[#b7c8ff] uppercase">Follow-up, after you answer</p>
             <p className="mt-2 max-w-3xl text-base leading-relaxed text-white/80">
-              You mentioned your pricing work at Prasco. How did someone use that analysis?
+              You mentioned your pricing work. How did someone use that analysis?
             </p>
           </div>
         </div>
