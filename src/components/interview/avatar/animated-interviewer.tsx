@@ -1,7 +1,7 @@
 import type { CharacterLook, HairStyle } from "@/components/interview/avatar/types";
 
 const faceRound =
-  "M200 112 C252 114 286 156 284 206 C282 258 258 304 200 316 C142 304 118 258 116 206 C114 156 148 114 200 112 Z";
+  "M200 118 C246 116 270 162 268 208 C266 256 248 302 200 314 C152 302 134 256 132 208 C130 162 154 116 200 118 Z";
 const faceDefined =
   "M200 110 C246 112 278 154 276 202 C274 250 256 308 200 322 C144 308 126 250 124 202 C122 154 154 112 200 110 Z";
 
@@ -48,17 +48,21 @@ export function AnimatedInterviewer({
 
       <g className="avatar-head">
         <HairBack style={look.hairStyle} fill={`url(#${id}-hair)`} />
-        <ellipse cx="112" cy="210" rx="14" ry="20" fill={look.skin[2]} />
-        <ellipse cx="288" cy="210" rx="14" ry="20" fill={look.skin[1]} />
+        {look.hairStyle === "short" ? (
+          <>
+            <Ear side="left" fill={look.skin[2]} />
+            <Ear side="right" fill={look.skin[1]} />
+          </>
+        ) : null}
         <path d={face} fill={`url(#${id}-skin)`} />
         <path d={face} fill={`url(#${id}-light)`} />
-        <ellipse cx="152" cy="232" rx="16" ry="8" fill="#e08b7c" opacity={look.blush} />
-        <ellipse cx="248" cy="232" rx="16" ry="8" fill="#e08b7c" opacity={look.blush * 0.8} />
-        <ellipse cx="200" cy="308" rx="36" ry="8" fill="#000" opacity="0.08" />
-        <path d="M196 214 Q200 232 190 242 Q200 248 210 242 Q200 232 204 214 Z" fill={look.skin[2]} opacity="0.28" />
-        <Brows />
-        <Eye cx={166} cy={188} scale={look.eyeScale} iris={look.iris} lid={look.skin[1]} />
-        <Eye cx={234} cy={188} scale={look.eyeScale} iris={look.iris} lid={look.skin[1]} />
+        <ellipse cx="154" cy="236" rx="18" ry="9" fill="#e08b7c" opacity={look.blush} />
+        <ellipse cx="246" cy="236" rx="18" ry="9" fill="#e08b7c" opacity={look.blush * 0.85} />
+        <ellipse cx="200" cy="304" rx="26" ry="6" fill="#000" opacity="0.05" />
+        <Nose fill={look.skin[2]} />
+        <Brows soft={look.hairStyle === "long"} />
+        <Eye cx={164} cy={198} scale={look.eyeScale} iris={look.iris} lid={look.skin[1]} />
+        <Eye cx={236} cy={198} scale={look.eyeScale} iris={look.iris} lid={look.skin[1]} />
         <Mouth smile={look.smile} lip={look.lip} />
         {look.beard ? (
           <path d="M156 286 C164 316 180 332 200 334 C220 332 236 316 244 286 C228 300 214 306 200 306 C186 306 172 300 156 286 Z" fill={`url(#${id}-hair)`} />
@@ -84,11 +88,41 @@ function Eye({ cx, cy, scale, iris, lid }: { cx: number; cy: number; scale: numb
   );
 }
 
-function Brows() {
+function Nose({ fill }: { fill: string }) {
+  return (
+    <g opacity="0.35">
+      <path d="M200 214 C197 232 196 244 200 248 C204 244 203 232 200 214" fill={fill} />
+      <ellipse cx="191" cy="250" rx="5" ry="3" fill={fill} />
+      <ellipse cx="209" cy="250" rx="5" ry="3" fill={fill} />
+    </g>
+  );
+}
+
+function Ear({ side, fill }: { side: "left" | "right"; fill: string }) {
+  const outer = side === "left"
+    ? "M122 192 C104 202 100 226 112 240 C126 252 138 240 136 222 C134 206 130 196 122 192 Z"
+    : "M278 192 C296 202 300 226 288 240 C274 252 262 240 264 222 C266 206 270 196 278 192 Z";
+  const inner = side === "left"
+    ? "M120 208 C112 218 116 230 124 230 C130 228 132 216 126 208 Z"
+    : "M280 208 C288 218 284 230 276 230 C270 228 268 216 274 208 Z";
   return (
     <g>
-      <path className="avatar-brow" d="M142 162 Q166 148 190 160" />
-      <path className="avatar-brow" d="M210 160 Q234 148 258 162" />
+      <path d={outer} fill={fill} />
+      <path d={inner} fill="#000" opacity="0.12" />
+    </g>
+  );
+}
+
+function Brows({ soft }: { soft: boolean }) {
+  return soft ? (
+    <g>
+      <path className="avatar-brow" d="M140 176 Q166 160 192 172" />
+      <path className="avatar-brow" d="M208 172 Q234 160 260 176" />
+    </g>
+  ) : (
+    <g>
+      <path className="avatar-brow" d="M144 174 Q168 166 194 172" />
+      <path className="avatar-brow" d="M206 172 Q232 166 256 174" />
     </g>
   );
 }
@@ -109,24 +143,25 @@ function Mouth({ smile, lip }: { smile: number; lip: string }) {
 
 function HairBack({ style, fill }: { style: HairStyle; fill: string }) {
   if (style === "short") {
-    return <path d="M118 198 C110 128 148 52 200 46 C252 52 290 128 282 198 C266 168 244 150 220 146 C200 156 180 156 160 146 C136 150 122 168 118 198 Z" fill={fill} />;
+    return <path d="M118 188 C108 118 148 52 200 44 C252 52 292 118 282 188 C268 150 240 122 200 118 C160 122 132 150 118 188 Z" fill={fill} />;
   }
-  return (
-    <path
-      fill={fill}
-      fillRule="evenodd"
-      d="M104 196 C96 118 136 40 200 34 C264 40 304 118 296 196 C286 286 270 360 246 412 L214 398 C238 328 248 250 234 190 C222 150 210 142 200 142 C190 142 178 150 166 190 C152 250 162 328 186 398 L154 412 C130 360 114 286 104 196 Z"
-    />
-  );
+  return <path d="M116 190 C104 120 148 50 200 44 C252 50 296 120 284 190 C270 150 240 124 200 120 C160 124 130 150 116 190 Z" fill={fill} />;
 }
 
 function HairFront({ style, fill }: { style: HairStyle; fill: string }) {
   if (style === "short") {
-    return <path d="M146 162 C168 128 198 116 230 132 C252 146 258 164 240 172 C210 156 176 154 154 172 C142 164 140 164 146 162 Z" fill={fill} />;
+    return (
+      <g>
+        <path d="M124 178 C128 112 156 72 200 66 C244 72 272 112 276 178 C262 156 238 142 214 140 C200 152 186 152 172 140 C148 142 134 156 124 178 Z" fill={fill} />
+        <path d="M124 162 C114 186 116 214 130 220 C140 206 140 182 132 164 Z" fill={fill} />
+        <path d="M276 162 C286 186 284 214 270 220 C260 206 260 182 268 164 Z" fill={fill} />
+      </g>
+    );
   }
   return (
-    <g>
-      <path d="M148 168 C172 124 220 112 262 148 C244 168 188 174 154 160 C144 154 140 158 148 168 Z" fill={fill} />
-    </g>
+    <path
+      fill={fill}
+      d="M102 326 C90 228 108 164 132 136 C156 92 176 72 200 66 C224 72 244 92 268 136 C292 164 310 228 298 326 C282 346 266 316 260 274 C254 198 244 152 222 134 C208 122 192 122 178 134 C156 152 146 198 140 274 C134 316 118 346 102 326 Z"
+    />
   );
 }

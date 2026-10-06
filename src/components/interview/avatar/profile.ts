@@ -15,7 +15,7 @@ export const interviewerProfiles: InterviewerProfile[] = [
     visualPersonality: "warm",
     look: {
       skin: ["#f6d3be", "#e7b496", "#c98b6e"],
-      hair: ["#6a432c", "#3a2418"],
+      hair: ["#8a5a38", "#4e301c"],
       hairStyle: "long",
       iris: "#6a5038",
       lip: "#c56d64",
@@ -37,7 +37,7 @@ export const interviewerProfiles: InterviewerProfile[] = [
     visualPersonality: "direct",
     look: {
       skin: ["#f0c9a6", "#d7a57e", "#b07d58"],
-      hair: ["#3d2a22", "#1c1410"],
+      hair: ["#5c4034", "#2a1c16"],
       hairStyle: "short",
       iris: "#3d2c22",
       lip: "#b06a5c",
