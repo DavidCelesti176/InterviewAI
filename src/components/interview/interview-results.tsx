@@ -20,6 +20,7 @@ import {
   clearPracticeNotice,
   readPracticeNotice,
   saveInterviewAnalysis,
+  saveInterviewResult,
   savePracticeSetup,
   type PracticeNotice,
   type SavedInterviewResult,
@@ -59,6 +60,7 @@ export function InterviewResults() {
       setMissing(true);
       return;
     }
+    saveInterviewResult(saved);
     setResult(saved);
     const candidateText = saved.turns
       .filter((turn) => turn.speaker === "candidate")

@@ -19,7 +19,7 @@ import { interviewModeOf } from "@/lib/interview/help-types";
 import { speakingMetrics } from "@/lib/interview/speaking-metrics";
 import type { StoredInterview } from "@/lib/interview/store";
 import type { InterviewTurn } from "@/lib/interview/types";
-import { analysisModel } from "@/lib/live/config";
+import { analysisModel, planReasoning } from "@/lib/live/config";
 
 export type AnalysisStep = "reviewing" | "evaluating" | "building_plan";
 
@@ -175,11 +175,11 @@ export async function analyzeInterview(input: {
 
   onStep("evaluating", "active");
   const started = Date.now();
-  const client = new OpenAI({ maxRetries: 0, timeout: 110_000 });
+  const client = new OpenAI({ maxRetries: 0, timeout: 24_000 });
   const model = analysisModel();
   const response = await client.responses.create({
     model,
-    reasoning: { effort: "medium" },
+    reasoning: planReasoning,
     instructions: analysisInstructions,
     input: analysisInput(
       input.interview.config,

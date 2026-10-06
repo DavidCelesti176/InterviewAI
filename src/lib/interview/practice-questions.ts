@@ -3,17 +3,19 @@ import type { InterviewAnalysis, QuestionFeedback } from "@/lib/interview/analys
 const PRACTICE_LIMIT = 4;
 
 export function questionsForWeakPractice(analysis: InterviewAnalysis): QuestionFeedback[] {
-  const marked = analysis.questionFeedback.filter((item) => item.recommendedForPractice);
-  if (marked.length > 0) return orderByPriority(marked, analysis).slice(0, PRACTICE_LIMIT);
-  const related = new Set(analysis.practiceRecommendations.flatMap((item) => item.relatedQuestionIds));
-  const linked = analysis.questionFeedback.filter((item) => related.has(item.id));
-  const pool = linked.length > 0 ? linked : [...analysis.questionFeedback].sort((left, right) => left.score - right.score);
-  return orderByPriority(pool, analysis).slice(0, PRACTICE_LIMIT);
+  const feedback = analysis.questionFeedback ?? [];
+  const recommendations = analysis.practiceRecommendations ?? [];
+  const marked = feedback.filter((item) => item.recommendedForPractice);
+  if (marked.length > 0) return orderByPriority(marked, recommendations).slice(0, PRACTICE_LIMIT);
+  const related = new Set(recommendations.flatMap((item) => item.relatedQuestionIds));
+  const linked = feedback.filter((item) => related.has(item.id));
+  const pool = linked.length > 0 ? linked : [...feedback].sort((left, right) => left.score - right.score);
+  return orderByPriority(pool, recommendations).slice(0, PRACTICE_LIMIT);
 }
 
-function orderByPriority(questions: QuestionFeedback[], analysis: InterviewAnalysis): QuestionFeedback[] {
+function orderByPriority(questions: QuestionFeedback[], recommendations: InterviewAnalysis["practiceRecommendations"]): QuestionFeedback[] {
   const rank = new Map<string, number>();
-  analysis.practiceRecommendations.forEach((item, index) => {
+  (recommendations ?? []).forEach((item, index) => {
     const weight = item.priority === "high" ? 0 : item.priority === "medium" ? 1 : 2;
     for (const id of item.relatedQuestionIds) {
       const current = rank.get(id);

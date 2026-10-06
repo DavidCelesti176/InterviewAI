@@ -1,3 +1,4 @@
+import { InterviewHistory } from "@/components/interview/interview-history";
 import { PageShell } from "@/components/interview/page-shell";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -43,6 +44,7 @@ export default function Home() {
           </div>
         </Card>
       </div>
+      <InterviewHistory />
       <section id="how-it-works" className="grid gap-4 sm:grid-cols-3">
         {steps.map((step, index) => (
           <Card key={step.title} className="flex flex-col gap-2 p-5">

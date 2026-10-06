@@ -5,9 +5,11 @@ import type { DurationChoice, InterviewMode, InterviewTurn, InterviewType, Prepa
 const setupKey = "interview-setup";
 const draftKey = "interview-draft";
 const resultKey = "interview-result";
+const historyKey = "interview-history";
 const debugKey = "interview-debug";
 const practiceKey = "interview-practice";
 const practiceNoticeKey = "interview-practice-notice";
+const maxHistory = 12;
 
 export type InterviewSetup = {
   interviewId: string;
@@ -61,6 +63,17 @@ export type SavedInterviewResult = {
   analysisDebug?: AnalysisDebug;
 };
 
+export type InterviewHistoryItem = {
+  interviewId: string;
+  company: string;
+  jobTitle: string;
+  savedAt: number;
+  elapsedMs: number;
+  analyzed: boolean;
+};
+
+type StoredHistoryItem = SavedInterviewResult & { savedAt: number };
+
 function readJson<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   const raw = window.sessionStorage.getItem(key);
@@ -98,12 +111,65 @@ export function readInterviewResult(): SavedInterviewResult | null {
 
 export function saveInterviewResult(result: SavedInterviewResult): void {
   window.sessionStorage.setItem(resultKey, JSON.stringify(result));
+  rememberInterview(result);
 }
 
 export function saveInterviewAnalysis(analysis: InterviewAnalysis, debug?: AnalysisDebug): void {
   const current = readInterviewResult();
   if (!current) return;
   saveInterviewResult({ ...current, analysis, analysisDebug: debug });
+}
+
+export function listInterviewHistory(): InterviewHistoryItem[] {
+  return readHistory()
+    .filter((item) => item.setup?.interviewId && item.setup.company && item.setup.jobTitle)
+    .map((item) => ({
+      interviewId: item.setup.interviewId,
+      company: item.setup.company,
+      jobTitle: item.setup.jobTitle,
+      savedAt: item.savedAt,
+      elapsedMs: item.elapsedMs,
+      analyzed: Boolean(item.analysis?.summary),
+    }));
+}
+
+export function restoreInterviewHistory(interviewId: string): boolean {
+  const item = readHistory().find((entry) => entry.setup.interviewId === interviewId);
+  if (!item) return false;
+  const { savedAt, ...result } = item;
+  void savedAt;
+  window.sessionStorage.setItem(resultKey, JSON.stringify(result));
+  return true;
+}
+
+function rememberInterview(result: SavedInterviewResult): void {
+  try {
+    const history = readHistory().filter((item) => item.setup.interviewId !== result.setup.interviewId);
+    const previous = readHistory().find((item) => item.setup.interviewId === result.setup.interviewId);
+    history.unshift({ ...result, savedAt: previous?.savedAt ?? Date.now() });
+    window.localStorage.setItem(historyKey, JSON.stringify(history.slice(0, maxHistory)));
+  } catch {
+    // The current tab still has the transcript in session storage.
+  }
+}
+
+function readHistory(): StoredHistoryItem[] {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(historyKey);
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isStoredHistoryItem);
+  } catch {
+    return [];
+  }
+}
+
+function isStoredHistoryItem(value: unknown): value is StoredHistoryItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as StoredHistoryItem;
+  return typeof item.savedAt === "number" && Boolean(item.setup?.interviewId) && Array.isArray(item.turns);
 }
 
 export function savePracticeSetup(setup: PracticeSetup): void {
