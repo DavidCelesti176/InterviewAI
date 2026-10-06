@@ -232,12 +232,10 @@ export function InterviewResults() {
         />
       ) : null}
 
-      <Transcript
-        turns={result.turns}
-        analysis={result.analysis}
-        debug={result.analysisDebug}
-        error={phase === "error" ? error : ""}
-      />
+      <Transcript turns={result.turns} interviewerName={interviewerById(result.setup.interviewerProfileId).name} />
+      {process.env.NODE_ENV === "development" ? (
+        <DeveloperAnalysis debug={result.analysisDebug} analysis={result.analysis} error={phase === "error" ? error : ""} />
+      ) : null}
 
       <div className="flex flex-col items-start gap-3">
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -382,19 +380,52 @@ function FeedbackColumn({
 
 function Transcript({
   turns,
+  interviewerName,
+}: {
+  turns: SavedInterviewResult["turns"];
+  interviewerName: string;
+}) {
+  return (
+    <section className="flex flex-col gap-5 rounded-[24px] border border-line bg-card p-6 shadow-[var(--shadow-card)]">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">Transcript</h2>
+        <p className="mt-1 text-sm text-muted">The full conversation from this interview.</p>
+      </div>
+      {turns.length === 0 ? (
+        <p className="text-sm text-muted">No conversation was captured.</p>
+      ) : (
+        <ol className="flex flex-col gap-5">
+          {turns.map((turn) => {
+            const candidate = turn.speaker === "candidate";
+            return (
+              <li key={turn.id} className="flex flex-col gap-1">
+                <p className="text-sm font-medium">
+                  <span className={candidate ? "text-foreground" : "text-accent"}>{candidate ? "You" : interviewerName}</span>
+                  <span className="font-normal text-muted"> · {formatDuration(turn.timestampMs)}</span>
+                </p>
+                <p className="whitespace-pre-wrap leading-relaxed">{turn.text}</p>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function DeveloperAnalysis({
   analysis,
   debug,
   error,
 }: {
-  turns: SavedInterviewResult["turns"];
   analysis?: InterviewAnalysis;
   debug?: AnalysisDebug;
   error: string;
 }) {
-  if (process.env.NODE_ENV !== "development") return null;
+  if (!debug && !error && !analysis) return null;
   return (
     <details className="rounded-[20px] border border-dashed border-line p-4 text-sm">
-      <summary className="cursor-pointer font-medium">Developer transcript</summary>
+      <summary className="cursor-pointer font-medium">Developer analysis</summary>
       <div className="mt-4 flex flex-col gap-4">
         {debug ? (
           <dl className="grid gap-2 sm:grid-cols-2">
@@ -424,17 +455,6 @@ function Transcript({
         {analysis ? (
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted">{JSON.stringify(analysis, null, 2)}</pre>
         ) : null}
-        <ol className="flex max-h-96 flex-col gap-3 overflow-auto">
-          {turns.length === 0 ? <li>No turns were captured.</li> : null}
-          {turns.map((turn) => (
-            <li key={turn.id}>
-              <p className="font-medium">
-                {turn.speaker === "candidate" ? "Candidate" : "Interviewer"} · {formatDuration(turn.timestampMs)}
-              </p>
-              <p className="whitespace-pre-wrap text-muted">{turn.text}</p>
-            </li>
-          ))}
-        </ol>
       </div>
     </details>
   );
