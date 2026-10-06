@@ -188,6 +188,7 @@ export async function analyzeInterview(input: {
       input.turns,
       input.elapsedMs,
       assistanceContext(interviewModeOf(input.interview.config.interviewMode), input.assistance ?? [], input.pausedMs ?? 0),
+      input.interview.storyContext ?? "",
     ),
     text: {
       format: {

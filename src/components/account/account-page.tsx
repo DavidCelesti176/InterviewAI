@@ -4,7 +4,7 @@ import { sendPasswordResetEmail } from "firebase/auth";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { PageShell } from "@/components/interview/page-shell";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, TextInput } from "@/components/ui/field";
 import { useAuth } from "@/contexts/auth-context";
@@ -118,7 +118,12 @@ export function AccountPage() {
         </Button>
       </Card>
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl font-semibold">Saved resumes</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">Saved resumes</h2>
+          <ButtonLink href="/story-builder" variant="secondary">
+            Discover your story
+          </ButtonLink>
+        </div>
         {resumes.length === 0 ? <p className="text-sm text-muted">Resumes you upload for an interview show up here.</p> : null}
         {resumes.map((resume) => (
           <Card key={resume.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">

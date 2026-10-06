@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { PageShell } from "@/components/interview/page-shell";
 import { PreparingScreen, type PrepareStepState } from "@/components/interview/preparing-screen";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ChoiceCard } from "@/components/ui/choice-card";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
@@ -13,6 +14,8 @@ import { ProgressSteps } from "@/components/ui/progress-steps";
 import { UploadZone } from "@/components/ui/upload-zone";
 import { authorizedFetch } from "@/lib/account/client";
 import type { ResumeCard } from "@/lib/account/types";
+import { readSavedStory } from "@/lib/story/client";
+import type { ProfessionalStory } from "@/lib/story/types";
 import { readInterviewDraft, saveInterviewDraft, saveInterviewSetup, savePreparationDebug } from "@/lib/interview/browser-state";
 import { durationOptions, interviewTypeOptions } from "@/lib/interview/labels";
 import {
@@ -30,6 +33,7 @@ const resumeInputId = "resume-pdf";
 
 export function InterviewForm() {
   const router = useRouter();
+  const { user } = useAuth();
   const resumeRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(0);
   const [company, setCompany] = useState("");
@@ -47,6 +51,8 @@ export function InterviewForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [prepareSteps, setPrepareSteps] = useState<PrepareStepState[]>([]);
+  const [savedStory, setSavedStory] = useState<ProfessionalStory | null>(null);
+  const [useStory, setUseStory] = useState(false);
 
   useEffect(() => {
     const draft = readInterviewDraft();
@@ -83,6 +89,19 @@ export function InterviewForm() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void readSavedStory(user.uid)
+      .then((story) => {
+        if (!cancelled) setSavedStory(story);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   function currentDraft() {
     return {
@@ -259,6 +278,7 @@ function roleReady() {
         durationChoice: intake.body.durationChoice,
         roleAnalysis: roleResult.body.roleAnalysis,
         company: companyResult.ok ? companyResult.body : null,
+        useStory,
       });
       const summary = finished.ok ? isSummary(finished.body.summary) : null;
       const debug = finished.ok && isDebug(finished.body.debug) ? finished.body.debug : undefined;
@@ -378,6 +398,24 @@ function roleReady() {
                 }}
               />
               <p className="text-sm text-muted">Your resume, transcript, and feedback are saved privately to your account.</p>
+              {savedStory ? (
+                <Card className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-accent">Professional story available</p>
+                    <p className="mt-1 text-sm text-muted">
+                      {savedStory.identity.label}. We’ll use it only as private context. The interviewer still asks in their own words.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant={useStory ? "primary" : "secondary"} onClick={() => setUseStory((current) => !current)}>
+                      {useStory ? "Using your story" : "Use story"}
+                    </Button>
+                    <ButtonLink href="/story-builder" variant="ghost">
+                      Edit
+                    </ButtonLink>
+                  </div>
+                </Card>
+              ) : null}
             </div>
           ) : null}
           {step === 2 ? (

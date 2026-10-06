@@ -4,6 +4,8 @@ import { levelLabel } from "@/lib/interview/difficulty";
 import { interviewTypeLabel } from "@/lib/interview/labels";
 import { researchCompany } from "@/lib/interview/research-company";
 import { saveInterview } from "@/lib/interview/store";
+import { readProfessionalStory } from "@/lib/firebase/data";
+import { storyContextBlock } from "@/lib/story/story";
 import type { InterviewMode } from "@/lib/interview/help-types";
 import type { CompanyInterviewProfile, InterviewConfig, InterviewType, PreparationDebug, RoleAnalysis } from "@/lib/interview/types";
 
@@ -39,9 +41,12 @@ export async function finishPreparedInterview(input: {
   durationChoice: string;
   roleAnalysis: RoleAnalysis;
   company: { profile: CompanyInterviewProfile; cacheHit: boolean };
+  useStory?: boolean;
 }): Promise<{ summary: PreparationSummary; debug: PreparationDebug }> {
+  const savedStory = input.useStory ? await readProfessionalStory(input.uid) : null;
+  const storyContext = savedStory ? storyContextBlock(savedStory) : "";
   const difficultyCurve = curveFor(input.roleAnalysis);
-  const blueprint = await buildInterviewBlueprint(input.config, input.roleAnalysis, input.company.profile);
+  const blueprint = await buildInterviewBlueprint(input.config, input.roleAnalysis, input.company.profile, storyContext);
 
   const id = input.interviewId?.trim() || crypto.randomUUID();
   await saveInterview(
@@ -52,6 +57,7 @@ export async function finishPreparedInterview(input: {
       resumeFileName: input.resumeFileName,
       config: input.config,
       blueprint,
+      ...(storyContext ? { storyContext } : {}),
       debug: {
         cacheHit: input.company.cacheHit,
         roleAnalysis: input.roleAnalysis,

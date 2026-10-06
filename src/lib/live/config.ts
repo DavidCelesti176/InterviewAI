@@ -47,6 +47,11 @@ export function coachingModel(): string {
   return process.env.OPENAI_COACHING_MODEL?.trim() || planModel();
 }
 
+/** Story Builder reasoning. Defaults to the plan model and stays overrideable. */
+export function storyModel(): string {
+  return process.env.OPENAI_STORY_MODEL?.trim() || planModel();
+}
+
 const DEFAULT_PROFILE_TTL_DAYS = 45;
 
 export function companyProfileTtlMs(): number {

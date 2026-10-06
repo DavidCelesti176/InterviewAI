@@ -1,5 +1,57 @@
 rules_version = '2';
 service cloud.firestore {
+  function storyEvidenceOk(item) {
+    return item.keys().hasOnly(["title", "sourceExperience", "proof"])
+      && item.title is string && item.title.size() > 0 && item.title.size() <= 80
+      && item.sourceExperience is string && item.sourceExperience.size() > 0 && item.sourceExperience.size() <= 120
+      && item.proof is string && item.proof.size() > 0 && item.proof.size() <= 280;
+  }
+
+  function storyDocument() {
+    return request.resource.data.keys().hasOnly([
+        "identity",
+        "pattern",
+        "evidence",
+        "direction",
+        "generalTellMeAboutYourself",
+        "shortTellMeAboutYourself",
+        "memorability",
+        "resumeId",
+        "createdAt",
+        "updatedAt"
+      ])
+      && request.resource.data.identity.keys().hasOnly(["label", "statement"])
+      && request.resource.data.identity.label is string
+      && request.resource.data.identity.label.size() > 0
+      && request.resource.data.identity.label.size() <= 40
+      && request.resource.data.identity.statement is string
+      && request.resource.data.identity.statement.size() > 0
+      && request.resource.data.identity.statement.size() <= 280
+      && request.resource.data.pattern is string
+      && request.resource.data.pattern.size() > 0
+      && request.resource.data.pattern.size() <= 400
+      && request.resource.data.direction is string
+      && request.resource.data.direction.size() > 0
+      && request.resource.data.direction.size() <= 500
+      && request.resource.data.generalTellMeAboutYourself is string
+      && request.resource.data.generalTellMeAboutYourself.size() > 0
+      && request.resource.data.generalTellMeAboutYourself.size() <= 2200
+      && request.resource.data.shortTellMeAboutYourself is string
+      && request.resource.data.shortTellMeAboutYourself.size() <= 1100
+      && request.resource.data.memorability is string
+      && request.resource.data.memorability.size() <= 300
+      && request.resource.data.resumeId is string
+      && request.resource.data.resumeId.size() <= 80
+      && request.resource.data.createdAt is number
+      && request.resource.data.updatedAt is number
+      && request.resource.data.evidence is list
+      && request.resource.data.evidence.size() >= 1
+      && request.resource.data.evidence.size() <= 3
+      && (request.resource.data.evidence.size() < 1 || storyEvidenceOk(request.resource.data.evidence[0]))
+      && (request.resource.data.evidence.size() < 2 || storyEvidenceOk(request.resource.data.evidence[1]))
+      && (request.resource.data.evidence.size() < 3 || storyEvidenceOk(request.resource.data.evidence[2]));
+  }
+
   match /databases/{database}/documents {
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
@@ -23,6 +75,24 @@ service cloud.firestore {
       match /resumes/{resumeId} {
         allow read, delete: if request.auth != null && request.auth.uid == userId;
         allow create, update: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /progress/{progressId} {
+        allow read: if request.auth != null && request.auth.uid == userId && progressId == "main";
+        allow write: if false;
+
+        match /samples/{sampleId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          allow write: if false;
+        }
+      }
+
+      match /story/{storyId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId && storyId == "primary";
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && storyId == "primary"
+          && storyDocument();
       }
     }
   }

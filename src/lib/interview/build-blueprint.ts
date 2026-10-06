@@ -120,6 +120,7 @@ export async function buildInterviewBlueprint(
   config: InterviewConfig,
   role: RoleAnalysis,
   profile: CompanyInterviewProfile,
+  storyContext = "",
 ): Promise<InterviewBlueprint> {
   const curve = buildDifficultyCurve(role.candidateLevel, role.recommendedInterviewDifficulty);
   const calibration = buildExperienceCalibration(role);
@@ -148,7 +149,14 @@ Role competencies:
 ${role.keyCompetencies.map((item) => `${item.name} (${item.importance})`).join("\n")}
 
 Resume:
-${config.candidate.resumeText}`,
+${config.candidate.resumeText}
+${
+  storyContext
+    ? `
+${storyContext}
+Do not copy those sentences into openingStrategy. The opening stays a natural question. Do not turn the interview into a rehearsal of the saved story.`
+    : ""
+}`,
     text: {
       format: {
         type: "json_schema",

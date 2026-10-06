@@ -4,12 +4,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PageShell } from "@/components/interview/page-shell";
+import { ProgressPanel } from "@/components/progress/progress-panel";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/auth-context";
 import { authorizedFetch } from "@/lib/account/client";
 import { deleteOwnedInterview, listOwnedInterviews } from "@/lib/account/interviews";
 import type { InterviewCard, InterviewStatusName } from "@/lib/account/types";
+import { readSavedStory } from "@/lib/story/client";
+import type { ProfessionalStory } from "@/lib/story/types";
 import { saveInterviewSetup, type InterviewSetup } from "@/lib/interview/browser-state";
 import type { SavedInterviewResult } from "@/lib/interview/browser-state";
 import { interviewModeLabel } from "@/lib/interview/labels";
@@ -21,14 +24,17 @@ export function Dashboard() {
   const [error, setError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [story, setStory] = useState<ProfessionalStory | null>(null);
   const firstName = profile?.firstName || user?.displayName?.split(" ")[0] || "";
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    void listOwnedInterviews(user.uid)
-      .then((items) => {
-        if (!cancelled) setInterviews(items);
+    void Promise.all([listOwnedInterviews(user.uid), readSavedStory(user.uid).catch(() => null)])
+      .then(([items, savedStory]) => {
+        if (cancelled) return;
+        setInterviews(items);
+        setStory(savedStory);
       })
       .catch(() => {
         if (!cancelled) setError("Your interviews could not be loaded.");
@@ -71,6 +77,22 @@ export function Dashboard() {
           Start New Interview
         </ButtonLink>
       </div>
+      <ProgressPanel />
+      <StoryTool story={story} loading={loading} />
+      {latestPractice(interviews) ? (
+        <Card className="flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-accent">Career preparation</p>
+            <h2 className="mt-1 text-lg font-semibold">Practice weak answers</h2>
+            <p className="mt-1 text-sm text-muted">
+              {latestPractice(interviews)?.company} · {latestPractice(interviews)?.jobTitle}
+            </p>
+          </div>
+          <ButtonLink href={`/interview/${latestPractice(interviews)?.id}/results`} variant="secondary">
+            Practice weak answers
+          </ButtonLink>
+        </Card>
+      ) : null}
       {error ? (
         <p className="text-sm text-danger" role="alert">
           {error}
@@ -152,6 +174,42 @@ function InterviewAction({ item }: { item: InterviewCard }) {
       View Results
     </ButtonLink>
   );
+}
+
+function StoryTool({ story, loading }: { story: ProfessionalStory | null; loading: boolean }) {
+  if (loading) return <div className="h-36 rounded-[20px] border border-line bg-card" aria-hidden="true" />;
+  if (!story) {
+    return (
+      <Card className="flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-xl">
+          <p className="text-sm font-medium text-accent">Career preparation</p>
+          <h2 className="mt-1 text-xl font-semibold">Build Your Story</h2>
+          <p className="mt-1 text-sm text-muted">Turn your resume into a memorable professional story for “Tell me about yourself.”</p>
+          <p className="mt-1 text-sm text-muted">Discover the common thread in your experience.</p>
+        </div>
+        <ButtonLink href="/story-builder">Build My Story</ButtonLink>
+      </Card>
+    );
+  }
+  return (
+    <Card className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="max-w-xl">
+        <p className="text-sm font-medium text-accent">Your story</p>
+        <h2 className="mt-1 text-xl font-semibold">{story.identity.label}</h2>
+        <p className="mt-1 text-sm text-muted">“{story.identity.statement}”</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <ButtonLink href="/story-builder" variant="secondary">
+          View / Edit
+        </ButtonLink>
+        <ButtonLink href="/story-builder/practice">Practice</ButtonLink>
+      </div>
+    </Card>
+  );
+}
+
+function latestPractice(interviews: InterviewCard[]): InterviewCard | undefined {
+  return interviews.find((item) => item.status === "complete" && item.sessionKind === "interview");
 }
 
 function greeting(name: string): string {

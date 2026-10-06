@@ -59,6 +59,15 @@ export function InterviewResults({ interviewId }: { interviewId?: string }) {
   }, []);
 
   useEffect(() => {
+    if (phase !== "ready" || !interviewId) return;
+    void authorizedFetch("/api/progress/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interviewId }),
+    }).catch(() => undefined);
+  }, [interviewId, phase]);
+
+  useEffect(() => {
     let cancelled = false;
     async function load(): Promise<SavedInterviewResult | null> {
       if (!interviewId) return readInterviewResult();
@@ -317,6 +326,9 @@ export function InterviewResults({ interviewId }: { interviewId?: string }) {
           ) : null}
           <ButtonLink href="/interview/new" variant={phase === "ready" ? "secondary" : "primary"}>
             Start another interview
+          </ButtonLink>
+          <ButtonLink href="/story-builder" variant="ghost">
+            Improve your opening story
           </ButtonLink>
         </div>
         {phase === "ready" && result.analysis && questionsForWeakPractice(result.analysis).length > 0 ? (

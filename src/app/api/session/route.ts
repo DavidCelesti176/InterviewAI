@@ -7,6 +7,8 @@ import { buildPracticeInstructions } from "@/lib/interview/practice-prompt";
 import { buildInterviewerInstructions } from "@/lib/interview/prompt";
 import { getInterview } from "@/lib/interview/store";
 import { interviewerName, liveSessionSettings } from "@/lib/live/config";
+import { readProfessionalStory } from "@/lib/firebase/data";
+import { buildStoryPracticeInstructions } from "@/lib/story/practice-prompt";
 
 export const runtime = "nodejs";
 
@@ -39,6 +41,7 @@ export async function POST(request: Request) {
   let sdp = "";
   let interviewId = "";
   let interviewerId = "";
+  let storyPractice = false;
   try {
     const body: unknown = JSON.parse(raw);
     if (body && typeof body === "object" && "sdp" in body && typeof body.sdp === "string") {
@@ -49,6 +52,9 @@ export async function POST(request: Request) {
     }
     if (body && typeof body === "object" && "interviewerId" in body && typeof body.interviewerId === "string") {
       interviewerId = body.interviewerId.trim();
+    }
+    if (body && typeof body === "object" && "storyPractice" in body && body.storyPractice === true) {
+      storyPractice = true;
     }
   } catch {
     return jsonError("An SDP offer is required", 400);
@@ -61,11 +67,11 @@ export async function POST(request: Request) {
     sdp += "\r\n";
   }
 
-  if (!interviewId) {
+  if (!storyPractice && !interviewId) {
     return jsonError("Create an interview before starting.", 400);
   }
-  const interview = await getInterview(user.uid, interviewId);
-  if (!interview) {
+  const interview = storyPractice ? null : await getInterview(user.uid, interviewId);
+  if (!storyPractice && !interview) {
     return jsonError("This interview could not be found.", 404);
   }
 
@@ -76,9 +82,17 @@ export async function POST(request: Request) {
   const { model, voice } = liveSessionSettings(interviewerId);
   const name = interviewerName(interviewerId);
   const client = new OpenAI({ maxRetries: 0 });
-  const instructions = interview.practice
-    ? buildPracticeInstructions(interview.config, interview.blueprint, interview.practice, name)
-    : buildInterviewerInstructions(interview.config, interview.blueprint, name);
+  let instructions = "";
+  if (storyPractice) {
+    const story = await readProfessionalStory(user.uid);
+    if (!story) return jsonError("Build your story before practicing it.", 400);
+    instructions = buildStoryPracticeInstructions(story, name);
+  } else if (interview?.practice) {
+    instructions = buildPracticeInstructions(interview.config, interview.blueprint, interview.practice, name);
+  } else if (interview) {
+    instructions = buildInterviewerInstructions(interview.config, interview.blueprint, name, interview.storyContext ?? "");
+  }
+  if (!instructions) return jsonError("This interview could not be found.", 404);
 
   try {
     const result = await client.live.create({
@@ -100,10 +114,12 @@ export async function POST(request: Request) {
       },
     });
 
-    try {
-      await markInterviewStarted(user.uid, interviewId, interviewerId);
-    } catch (saveError) {
-      console.error("Interview start save failed", saveError instanceof Error ? saveError.message : "error");
+    if (!storyPractice) {
+      try {
+        await markInterviewStarted(user.uid, interviewId, interviewerId);
+      } catch (saveError) {
+        console.error("Interview start save failed", saveError instanceof Error ? saveError.message : "error");
+      }
     }
 
     return Response.json(

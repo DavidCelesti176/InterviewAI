@@ -133,6 +133,7 @@ export async function POST(request: Request) {
         company: profile
           ? { profile: profile.profile, cacheHit: profile.cacheHit === true }
           : { profile: unavailableCompanyProfile(config.company), cacheHit: false },
+        useStory: body.useStory === true,
       });
       return Response.json({
         summary: prepared.summary,

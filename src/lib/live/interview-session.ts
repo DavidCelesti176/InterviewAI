@@ -185,7 +185,12 @@ export class InterviewSession {
     };
   }
 
-  async start(interviewId: string, interviewerId?: string, targetDurationMinutes = 30): Promise<void> {
+  async start(
+    interviewId: string,
+    interviewerId?: string,
+    targetDurationMinutes = 30,
+    options?: { storyPractice?: boolean },
+  ): Promise<void> {
     if (!this.snapshot.canStart) return;
     this.generation += 1;
     const generation = this.generation;
@@ -251,7 +256,12 @@ export class InterviewSession {
       const response = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-firebase-token": token },
-        body: JSON.stringify({ sdp, interviewId, interviewerId }),
+        body: JSON.stringify({
+          sdp,
+          interviewId,
+          interviewerId,
+          ...(options?.storyPractice ? { storyPractice: true } : {}),
+        }),
       });
       if (generation !== this.generation) return;
       if (!response.ok) {

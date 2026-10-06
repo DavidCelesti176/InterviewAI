@@ -28,6 +28,7 @@ export function analysisInput(
   turns: InterviewTurn[],
   elapsedMs: number,
   assistanceContext = "",
+  storyContext = "",
 ): string {
   const openingSeconds = openingAnswerSeconds(turns);
   const openingNote =
@@ -69,6 +70,14 @@ ${clip(config.jobDescription, 2500)}
 
 Resume context:
 ${clip(config.candidate.resumeText, 2500)}
+${
+  storyContext
+    ? `
+Saved professional story, for a tell-me-about-yourself or opening answer only. Different wording is fine. Do not penalize them for that. If the answer walks through jobs in order and the theme arrives late or never, say that on the opening question card.
+${storyContext}
+`
+    : ""
+}
 
 Transcript:
 ${formatTranscript(turns)}`;

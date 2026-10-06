@@ -10,6 +10,7 @@ export type StoredInterview = {
   blueprint: InterviewBlueprint;
   debug: PreparationDebug;
   practice?: PracticeFocus;
+  storyContext?: string;
 };
 
 export async function saveInterview(

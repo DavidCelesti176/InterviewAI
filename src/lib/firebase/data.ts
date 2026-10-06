@@ -1,6 +1,10 @@
 import type { CollectionReference, DocumentData, Firestore } from "firebase-admin/firestore";
 
 import type { InterviewCard, InterviewStatusName, ResumeCard, UserProfile } from "@/lib/account/types";
+import { spokenEnough } from "@/lib/progress/award";
+import { awardAnalyzedInterview, awardPracticeSession } from "@/lib/progress/store";
+import { storyFromUnknown } from "@/lib/story/story";
+import type { ProfessionalStory } from "@/lib/story/types";
 import type { InterviewAnalysis } from "@/lib/interview/analysis-types";
 import type { SavedInterviewResult } from "@/lib/interview/browser-state";
 import type { InterviewAssistanceEvent, InterviewPauseEvent } from "@/lib/interview/help-types";
@@ -305,7 +309,7 @@ async function readTurns(uid: string, interviewId: string): Promise<InterviewTur
   return turns;
 }
 
-async function readAnalysis(uid: string, interviewId: string): Promise<InterviewAnalysis | null> {
+export async function readAnalysis(uid: string, interviewId: string): Promise<InterviewAnalysis | null> {
   const snap = await (await interviewRef(uid, interviewId)).collection("analysis").doc("main").get();
   if (!snap.exists) return null;
   const data = snap.data() ?? {};
@@ -380,6 +384,17 @@ export async function saveInterviewProgress(
     { merge: true },
   );
   await batch.commit();
+  const spoken = input.turns
+    .filter((turn) => turn.speaker === "candidate")
+    .map((turn) => turn.text)
+    .join(" ");
+  if (nextStatus === "complete" && snap.get("sessionKind") === "practice" && spokenEnough(spoken)) {
+    try {
+      await awardPracticeSession(uid, interviewId, "weak_practice");
+    } catch (error) {
+      console.error("Progress award failed", error instanceof Error ? error.message : "error");
+    }
+  }
   return true;
 }
 
@@ -425,6 +440,11 @@ export async function saveInterviewAnalysis(
     },
     { merge: true },
   );
+  try {
+    await awardAnalyzedInterview(uid, interviewId, analysis, text(snap.get("interviewType"), 40));
+  } catch (error) {
+    console.error("Progress award failed", error instanceof Error ? error.message : "error");
+  }
   return true;
 }
 
@@ -506,6 +526,12 @@ export async function listResumes(uid: string): Promise<ResumeCard[]> {
       lastUsedAt: num(data.lastUsedAt),
     };
   });
+}
+
+export async function readProfessionalStory(uid: string): Promise<ProfessionalStory | null> {
+  const snap = await (await database()).doc(`users/${uid}/story/primary`).get();
+  if (!snap.exists) return null;
+  return storyFromUnknown(snap.data());
 }
 
 export async function deleteResume(uid: string, resumeId: string): Promise<boolean> {

@@ -61,7 +61,12 @@ ${summary}
 Behavioral emphasis: ${style.behavioralEmphasis}. Technical emphasis: ${style.technicalEmphasis}.${patterns}`;
 }
 
-export function buildInterviewerInstructions(config: InterviewConfig, blueprint: InterviewBlueprint, interviewerName = "Claire"): string {
+export function buildInterviewerInstructions(
+  config: InterviewConfig,
+  blueprint: InterviewBlueprint,
+  interviewerName = "Claire",
+  storyContext = "",
+): string {
   const competencies = blueprint.competencyPriorities
     .map((item) => `- ${item.competency} (${item.priority}): ${item.reason}`)
     .join("\n");
@@ -151,5 +156,6 @@ Job description, for context:
 ${config.jobDescription}
 
 Candidate resume, for context only. Do not recite it:
-${config.candidate.resumeText}`;
+${config.candidate.resumeText}
+${storyContext ? `\n${storyContext}` : ""}`;
 }
