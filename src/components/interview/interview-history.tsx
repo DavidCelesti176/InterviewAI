@@ -3,26 +3,38 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { listInterviewHistory, restoreInterviewHistory, type InterviewHistoryItem } from "@/lib/interview/browser-state";
 
 export function InterviewHistory() {
   const router = useRouter();
   const [items, setItems] = useState<InterviewHistoryItem[]>([]);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setItems(listInterviewHistory());
+    setReady(true);
   }, []);
 
-  if (items.length === 0) return null;
+  if (!ready) return <div className="h-28" aria-hidden="true" />;
+
+  if (items.length === 0) {
+    return (
+      <Card className="flex flex-col items-start gap-4 p-6">
+        <div>
+          <h2 className="text-lg font-semibold">No interviews yet</h2>
+          <p className="mt-1 max-w-md text-sm text-muted">
+            Add a job listing and your resume, then practice out loud. The review stays here when you finish.
+          </p>
+        </div>
+        <ButtonLink href="/interview/new">Start an interview</ButtonLink>
+      </Card>
+    );
+  }
 
   return (
-    <section className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Your interviews</h2>
-        <p className="mt-1 text-sm text-muted">Saved in this browser, so you can open a finished interview again.</p>
-      </div>
+    <section className="flex flex-col gap-3">
       <div className="grid gap-3">
         {items.map((item) => (
           <Card key={item.interviewId} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
