@@ -2,16 +2,16 @@ import type { App } from "firebase-admin/app";
 
 const APP_NAME = "interviewai-admin";
 
+function envValue(name: string): string {
+  return process.env[name] ?? "";
+}
+
 export function adminConfigured(): boolean {
-  return Boolean(
-    process.env.FIREBASE_ADMIN_PROJECT_ID &&
-      process.env.FIREBASE_ADMIN_CLIENT_EMAIL &&
-      process.env.FIREBASE_ADMIN_PRIVATE_KEY,
-  );
+  return Boolean(envValue("FIREBASE_ADMIN_PROJECT_ID") && envValue("FIREBASE_ADMIN_CLIENT_EMAIL") && envValue("FIREBASE_ADMIN_PRIVATE_KEY"));
 }
 
 function privateKey(): string {
-  return (process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
+  return envValue("FIREBASE_ADMIN_PRIVATE_KEY").replace(/\\n/g, "\n");
 }
 
 export async function getAdminApp(): Promise<App> {
@@ -24,11 +24,11 @@ export async function getAdminApp(): Promise<App> {
   return initializeApp(
     {
       credential: cert({
-        projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+        projectId: envValue("FIREBASE_ADMIN_PROJECT_ID"),
+        clientEmail: envValue("FIREBASE_ADMIN_CLIENT_EMAIL"),
         privateKey: privateKey(),
       }),
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      storageBucket: envValue("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"),
     },
     APP_NAME,
   );
