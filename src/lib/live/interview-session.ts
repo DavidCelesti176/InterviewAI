@@ -1,5 +1,7 @@
+import { currentIdToken } from "@/lib/firebase/client";
 import type { InterviewPauseEvent } from "@/lib/interview/help-types";
-import { continueInstruction, openingInstruction } from "@/lib/interview/opening";
+import { buildContinueInstruction } from "@/lib/interview/interview-phase";
+import { openingInstruction } from "@/lib/interview/opening";
 import { pauseInstruction, resumeInstruction, resumeRepeatInstruction } from "@/lib/interview/session-cues";
 import type { InterviewTurn } from "@/lib/interview/types";
 
@@ -8,6 +10,7 @@ export type InterviewStatus =
   | "Connecting"
   | "Speaking"
   | "Listening"
+  | "Thinking"
   | "Ended"
   | "Error";
 
@@ -49,6 +52,7 @@ const CLOSE_TIMEOUT_MS = 15_000;
 const SPEAKING_THRESHOLD = 0.02;
 const SPEAKING_HANGOVER_MS = 400;
 const CONTINUE_AFTER_MS = 7_000;
+const THINKING_AFTER_MS = 2_500;
 const DEBUG_LIMIT = 300;
 const BAR_COUNT = 8;
 
@@ -151,6 +155,7 @@ export class InterviewSession {
   private openText = "";
   private openTimestamp = 0;
   private lastCandidateSpeechAt: number | null = null;
+  private targetDurationMinutes = 30;
   private lastInterviewerSpeechAt: number | null = null;
   private continueTimer: ReturnType<typeof setTimeout> | null = null;
   private nudgedForTurn = false;
@@ -180,11 +185,12 @@ export class InterviewSession {
     };
   }
 
-  async start(interviewId: string): Promise<void> {
+  async start(interviewId: string, interviewerId?: string, targetDurationMinutes = 30): Promise<void> {
     if (!this.snapshot.canStart) return;
     this.generation += 1;
     const generation = this.generation;
     this.resetForStart();
+    this.targetDurationMinutes = Number.isFinite(targetDurationMinutes) && targetDurationMinutes > 0 ? targetDurationMinutes : 30;
     this.patch({ status: "Connecting", canStart: false, errorMessage: null, autoplayBlocked: false });
 
     try {
@@ -240,10 +246,12 @@ export class InterviewSession {
       const sdp = connection.localDescription?.sdp;
       if (!sdp) throw new Error("Missing local SDP offer");
 
+      const token = await currentIdToken();
+      if (!token) throw new Error("Sign in to continue.");
       const response = await fetch("/api/session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sdp, interviewId }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sdp, interviewId, interviewerId }),
       });
       if (generation !== this.generation) return;
       if (!response.ok) {
@@ -443,9 +451,14 @@ export class InterviewSession {
 
     const now = performance.now();
     if (rms > SPEAKING_THRESHOLD) this.speakingUntil = now + SPEAKING_HANGOVER_MS;
-    const live = this.snapshot.status === "Speaking" || this.snapshot.status === "Listening";
+    const live =
+      this.snapshot.status === "Speaking" || this.snapshot.status === "Listening" || this.snapshot.status === "Thinking";
     const speaking = now < this.speakingUntil;
-    const status = live ? (speaking ? "Speaking" : "Listening") : this.snapshot.status;
+    const waitingOnInterviewer =
+      this.lastCandidateSpeechAt !== null &&
+      (this.lastInterviewerSpeechAt === null || this.lastInterviewerSpeechAt < this.lastCandidateSpeechAt) &&
+      Date.now() - this.lastCandidateSpeechAt >= THINKING_AFTER_MS;
+    const status = !live ? this.snapshot.status : speaking ? "Speaking" : waitingOnInterviewer ? "Thinking" : "Listening";
 
     if (
       status !== this.snapshot.status ||
@@ -594,7 +607,7 @@ export class InterviewSession {
       event_id: this.commandId("delegation"),
       delegation_id: id,
       content:
-        "No backend tools exist. Do not wait. Ask one follow-up now about a specific thing the candidate just said, then listen. Do not delegate again.",
+        "No backend tools exist. Do not wait. If the last answer was complete, move to the next topic. Ask a follow-up only when that answer was vague or incomplete. Do not delegate again.",
     });
   }
 
@@ -647,7 +660,17 @@ export class InterviewSession {
       type: "session.instructions.append",
       event_id: this.commandId("continue"),
       delegation_id: null,
-      content: this.cues?.continuePrompt ?? continueInstruction,
+      content: this.cues?.continuePrompt ?? this.interviewContinueInstruction(),
+    });
+  }
+
+  private interviewContinueInstruction(): string {
+    const pending = this.openSpeaker === "candidate" ? this.openText : "";
+    return buildContinueInstruction({
+      elapsedMs: this.activeElapsed(),
+      targetMinutes: this.targetDurationMinutes,
+      turns: this.turns,
+      pendingCandidateText: pending,
     });
   }
 

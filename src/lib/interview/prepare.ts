@@ -32,6 +32,8 @@ export function emphasisLabel(profile: CompanyInterviewProfile, interviewType: I
 }
 
 export async function finishPreparedInterview(input: {
+  uid: string;
+  interviewId?: string;
   config: InterviewConfig;
   resumeFileName: string;
   durationChoice: string;
@@ -41,21 +43,30 @@ export async function finishPreparedInterview(input: {
   const difficultyCurve = curveFor(input.roleAnalysis);
   const blueprint = await buildInterviewBlueprint(input.config, input.roleAnalysis, input.company.profile);
 
-  const id = crypto.randomUUID();
-  await saveInterview({
-    id,
-    createdAt: Date.now(),
-    resumeFileName: input.resumeFileName,
-    config: input.config,
-    blueprint,
-    debug: {
-      cacheHit: input.company.cacheHit,
-      roleAnalysis: input.roleAnalysis,
-      difficultyCurve,
-      companyProfile: input.company.profile,
+  const id = input.interviewId?.trim() || crypto.randomUUID();
+  await saveInterview(
+    input.uid,
+    {
+      id,
+      createdAt: Date.now(),
+      resumeFileName: input.resumeFileName,
+      config: input.config,
       blueprint,
+      debug: {
+        cacheHit: input.company.cacheHit,
+        roleAnalysis: input.roleAnalysis,
+        difficultyCurve,
+        companyProfile: input.company.profile,
+        blueprint,
+      },
     },
-  });
+    {
+      status: "ready",
+      durationChoice: input.durationChoice,
+      levelLabel: levelLabel(input.roleAnalysis.candidateLevel),
+      emphasisLabel: emphasisLabel(input.company.profile, input.config.interviewType),
+    },
+  );
 
   return {
     summary: {
@@ -86,6 +97,7 @@ export function storedRoleAnalysis(value: unknown): RoleAnalysis | null {
 }
 
 export async function prepareInterview(input: {
+  uid: string;
   config: InterviewConfig;
   resumeFileName: string;
   durationChoice: string;
@@ -109,20 +121,29 @@ export async function prepareInterview(input: {
   input.onStep("building_plan", "done");
 
   const id = crypto.randomUUID();
-  await saveInterview({
-    id,
-    createdAt: Date.now(),
-    resumeFileName: input.resumeFileName,
-    config: input.config,
-    blueprint,
-    debug: {
-      cacheHit: company.cacheHit,
-      roleAnalysis,
-      difficultyCurve,
-      companyProfile: company.profile,
+  await saveInterview(
+    input.uid,
+    {
+      id,
+      createdAt: Date.now(),
+      resumeFileName: input.resumeFileName,
+      config: input.config,
       blueprint,
+      debug: {
+        cacheHit: company.cacheHit,
+        roleAnalysis,
+        difficultyCurve,
+        companyProfile: company.profile,
+        blueprint,
+      },
     },
-  });
+    {
+      status: "ready",
+      durationChoice: input.durationChoice,
+      levelLabel: levelLabel(roleAnalysis.candidateLevel),
+      emphasisLabel: emphasisLabel(company.profile, input.config.interviewType),
+    },
+  );
 
   return {
     summary: {

@@ -11,8 +11,10 @@ import { PauseOverlay } from "@/components/interview/pause-overlay";
 import { PreparationDebugPanel } from "@/components/interview/preparation-debug";
 import { Button } from "@/components/ui/button";
 import { helpTypeLabel } from "@/lib/interview/assistance";
+import { authorizedFetch } from "@/lib/account/client";
 import { saveInterviewResult, savePracticeNotice, type InterviewSetup } from "@/lib/interview/browser-state";
 import { currentInterviewQuestion, interviewModeOf, type InterviewAssistanceEvent } from "@/lib/interview/help-types";
+import { interviewPhase } from "@/lib/interview/interview-phase";
 import { interviewModeLabel, interviewTypeLabel } from "@/lib/interview/labels";
 import { pacingDiagnostics } from "@/lib/interview/pacing-diagnostics";
 import { practiceContinueInstruction, practiceOpeningInstruction } from "@/lib/interview/practice-cues";
@@ -47,6 +49,8 @@ export function InterviewRoom({
   const signatureRef = useRef("");
   const [snapshot, setSnapshot] = useState<InterviewSnapshot>(createSnapshot);
   const [closingCopy, setClosingCopy] = useState("Interview complete");
+  const [thinkingLong, setThinkingLong] = useState(false);
+  const [saveWarning, setSaveWarning] = useState(false);
 
   useEffect(() => {
     const session = new InterviewSession(
@@ -84,6 +88,13 @@ export function InterviewRoom({
       if (savedRef.current) return;
       savedRef.current = true;
       const latest = snapshotRef.current;
+      const persist = persistProgress(setup.interviewId, {
+        status: mode === "practice" ? "complete" : "analyzing",
+        turns: latest.turns,
+        elapsedMs: latest.elapsedMs,
+        assistance: assistanceRef.current,
+        pauses: latest.pauseEvents,
+      });
       if (mode === "practice") {
         savePracticeNotice({ questionCount: Math.max(1, practiceQuestions.length) });
       } else {
@@ -97,13 +108,43 @@ export function InterviewRoom({
           voiceUsageWhilePausedSeconds: latest.voiceUsageWhilePausedSeconds,
         });
       }
-      router.push("/interview/results");
+      void Promise.race([persist, wait(2500)]).finally(() => {
+        router.push(mode === "practice" ? "/interview/results" : `/interview/${setup.interviewId}/results`);
+      });
     }, 1600);
     return () => {
       if (copyTimer) window.clearTimeout(copyTimer);
       window.clearTimeout(leaveTimer);
     };
   }, [mode, practiceQuestions.length, router, setup, snapshot.status]);
+
+  useEffect(() => {
+    if (snapshot.status === "Ready" || snapshot.status === "Connecting") return;
+    if (snapshot.turns.length === 0 && snapshot.status !== "Error") return;
+    const status = snapshot.status === "Ended" ? (mode === "practice" ? "complete" : "analyzing") : snapshot.status === "Error" ? "failed" : "in_progress";
+    const timer = window.setTimeout(() => {
+      const latest = snapshotRef.current;
+      void persistProgress(setup.interviewId, {
+        status,
+        turns: latest.turns,
+        elapsedMs: latest.elapsedMs,
+        assistance: assistanceRef.current,
+        pauses: latest.pauseEvents,
+      })
+        .then(() => setSaveWarning(false))
+        .catch(() => setSaveWarning(true));
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [mode, setup.interviewId, snapshot.pauseEvents, snapshot.status, snapshot.turns, assistance]);
+
+  useEffect(() => {
+    if (snapshot.status !== "Thinking") {
+      setThinkingLong(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setThinkingLong(true), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [snapshot.status]);
 
   const avatarState = snapshot.paused ? "idle" : toAvatarState(snapshot.status, snapshot.muted);
   const finished = snapshot.status === "Ended";
@@ -126,6 +167,7 @@ export function InterviewRoom({
         <div className="min-w-0">
           <p className="truncate text-base font-medium sm:text-lg">{setup.company}</p>
           <p className="truncate text-sm text-white/70">{setup.jobTitle}</p>
+          {saveWarning ? <p className="text-xs text-amber-200">Having trouble saving this interview. We'll keep trying.</p> : null}
           <p className="truncate text-sm text-white/50">
             {mode === "practice"
               ? `Answer practice · ${practiceQuestions.length === 1 ? "1 question" : `${practiceQuestions.length} questions`}`
@@ -155,7 +197,7 @@ export function InterviewRoom({
             <p className="text-2xl font-semibold tracking-tight">{interviewer.name}</p>
             <p className="text-sm text-white/60">{interviewer.title}</p>
             <p className="mt-1 text-sm text-white/80" aria-live="polite">
-              {roomStatusLabel(snapshot.status, snapshot.muted, mode)}
+              {roomStatusLabel(snapshot.status, snapshot.muted, mode, interviewer.name, thinkingLong)}
             </p>
             {mode === "practice" && snapshot.canStart && practiceQuestions.length > 0 ? (
               <ul className="mt-3 flex max-h-24 w-full max-w-lg flex-col gap-1 overflow-auto">
@@ -181,7 +223,10 @@ export function InterviewRoom({
 
       <div className="relative flex shrink-0 flex-wrap items-center justify-center gap-3 px-5 pt-3 pb-4">
         {snapshot.canStart ? (
-          <Button type="button" onClick={() => void sessionRef.current?.start(setup.interviewId)}>
+          <Button
+            type="button"
+            onClick={() => void sessionRef.current?.start(setup.interviewId, setup.interviewerProfileId, setup.targetDurationMinutes)}
+          >
             {mode === "practice" ? "Start practice" : "Start interview"}
           </Button>
         ) : null}
@@ -273,8 +318,10 @@ export function InterviewRoom({
                 more {Math.round(pacing.twoOrMoreShare * 100)}%
               </p>
               <p>
-                Topic transitions {pacing.topicTransitions} · elapsed {formatElapsed(pacing.elapsedMs)} · candidate questions{" "}
+                Topic transitions {pacing.topicTransitions} · elapsed {formatElapsed(pacing.elapsedMs)} · phase{" "}
+                {interviewPhase(snapshot.turns, snapshot.elapsedMs, setup.targetDurationMinutes)} · candidate questions{" "}
                 {pacing.candidateQuestionsAtMs === null ? "not yet" : formatElapsed(pacing.candidateQuestionsAtMs)}
+                {pacing.connectivityChecks > 0 ? ` · connectivity checks ${pacing.connectivityChecks}` : ""}
               </p>
             </div>
           ) : null}
@@ -334,6 +381,29 @@ export function InterviewRoom({
   }
 }
 
+function persistProgress(
+  interviewId: string,
+  body: {
+    status: "in_progress" | "analyzing" | "complete" | "failed";
+    turns: InterviewSnapshot["turns"];
+    elapsedMs: number;
+    assistance: InterviewAssistanceEvent[];
+    pauses: InterviewSnapshot["pauseEvents"];
+  },
+): Promise<void> {
+  return authorizedFetch(`/api/account/interviews/${interviewId}/progress`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((response) => {
+    if (!response.ok) throw new Error("save failed");
+  });
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function roomSignature(snapshot: InterviewSnapshot): string {
   return [
     snapshot.status,
@@ -361,15 +431,23 @@ function toAvatarState(status: InterviewStatus, muted: boolean): AvatarState {
   if (status === "Ended") return "ended";
   if (status === "Connecting") return "connecting";
   if (status === "Speaking") return "speaking";
+  if (status === "Thinking") return "thinking";
   if (muted) return "muted";
   if (status === "Listening") return "listening";
   return "idle";
 }
 
-function roomStatusLabel(status: InterviewStatus, muted: boolean, mode: "interview" | "practice"): string {
+function roomStatusLabel(
+  status: InterviewStatus,
+  muted: boolean,
+  mode: "interview" | "practice",
+  name: string,
+  thinkingLong: boolean,
+): string {
   if (status === "Error") return "Error";
   if (status === "Ended") return "Ended";
   if (status === "Connecting") return "Connecting...";
+  if (status === "Thinking") return thinkingLong ? `${name} is still thinking...` : `${name} is thinking...`;
   if (muted && status !== "Speaking") return "Muted";
   if (status === "Speaking") return "Speaking...";
   if (status === "Listening") return "Listening...";

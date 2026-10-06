@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { authorizedFetch } from "@/lib/account/client";
 import type { HelpKind, InterviewHelpResponse } from "@/lib/interview/help-types";
 import type { InterviewTurn } from "@/lib/interview/types";
 
@@ -50,7 +51,7 @@ export function InterviewHelpPanel({
     setError("");
     setLoading(true);
     try {
-      const response = await fetch("/api/interview/help", {
+      const response = await authorizedFetch("/api/interview/help", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

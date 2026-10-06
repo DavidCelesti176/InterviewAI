@@ -253,6 +253,14 @@ body {
   animation: avatar-listen 14s ease-in-out infinite;
 }
 
+[data-avatar-state="thinking"] .avatar-head {
+  animation: avatar-think 4.8s ease-in-out infinite;
+}
+
+[data-avatar-state="thinking"] .avatar-brow {
+  animation: avatar-brow 4.8s ease-in-out infinite;
+}
+
 [data-avatar-state="listening"] .avatar-pupil {
   transform: translateX(-1px);
 }
@@ -263,6 +271,7 @@ body {
 
 [data-avatar-state="idle"] .avatar-body,
 [data-avatar-state="listening"] .avatar-body,
+[data-avatar-state="thinking"] .avatar-body,
 [data-avatar-state="speaking"] .avatar-body,
 [data-avatar-state="muted"] .avatar-body {
   animation: avatar-breath 5.4s ease-in-out infinite;
@@ -324,6 +333,16 @@ body {
   }
   36% {
     transform: translateY(4px) rotate(0.5deg);
+  }
+}
+
+@keyframes avatar-think {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-0.6deg);
+  }
+  50% {
+    transform: translateY(1px) rotate(0.5deg);
   }
 }
 

@@ -1,5 +1,6 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
+
+import { AccountMenu, BrandLink } from "@/components/auth/account-menu";
 
 export function PageShell({
   children,
@@ -16,9 +17,10 @@ export function PageShell({
         aria-hidden="true"
       />
       <main className={`relative mx-auto flex w-full ${max} flex-col gap-8 px-5 py-8 sm:px-6 sm:py-14`}>
-        <Link href="/" className="w-fit text-sm font-medium tracking-tight text-foreground">
-          InterviewAI
-        </Link>
+        <div className="flex items-center justify-between gap-4">
+          <BrandLink />
+          <AccountMenu />
+        </div>
         {children}
       </main>
     </div>

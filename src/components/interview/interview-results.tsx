@@ -13,6 +13,7 @@ import { ReadinessCard } from "@/components/interview/results/readiness-card";
 import { SkillBreakdown } from "@/components/interview/results/skill-breakdown";
 import { SpeakingMetricsPanel } from "@/components/interview/results/speaking-metrics";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { authorizedFetch } from "@/lib/account/client";
 import { coachingNote, helpRequestCount, mostRequestedHelp } from "@/lib/interview/assistance";
 import type { AnalysisDebug, InterviewAnalysis, QuestionFeedback } from "@/lib/interview/analysis-types";
 import {
@@ -31,17 +32,20 @@ import { questionsForWeakPractice } from "@/lib/interview/practice-questions";
 
 type Phase = "loading" | "ready" | "error" | "thin";
 
-type AnalysisPayload = { analysis: InterviewAnalysis; debug?: AnalysisDebug };
+type AnalysisPayload = { analysis: InterviewAnalysis; debug?: AnalysisDebug; saved?: boolean };
 
 const pending = new Map<string, Promise<AnalysisPayload>>();
 const listeners = new Map<string, (event: { step: AnalysisStepId; state: "active" | "done" }) => void>();
 
-export function InterviewResults() {
+export function InterviewResults({ interviewId }: { interviewId?: string }) {
   const router = useRouter();
   const [result, setResult] = useState<SavedInterviewResult | null>(null);
   const [missing, setMissing] = useState(false);
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
+  const [saveWarning, setSaveWarning] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [steps, setSteps] = useState<Partial<Record<AnalysisStepId, "active" | "done">>>({});
   const [attempt, setAttempt] = useState(0);
   const [practiceNotice, setPracticeNotice] = useState<PracticeNotice | null>(null);
@@ -55,37 +59,58 @@ export function InterviewResults() {
   }, []);
 
   useEffect(() => {
-    const saved = readInterviewResult();
-    if (!saved) {
-      setMissing(true);
-      return;
-    }
-    saveInterviewResult(saved);
-    setResult(saved);
-    const candidateText = saved.turns
-      .filter((turn) => turn.speaker === "candidate")
-      .map((turn) => turn.text.trim())
-      .join(" ");
-    if (candidateText.length < 40) {
-      setPhase("thin");
-      return;
-    }
-    if (saved.analysis && typeof saved.analysis.overallReadiness === "number" && saved.analysis.summary) {
-      setPhase("ready");
-      return;
-    }
-
-    const id = saved.setup.interviewId;
     let cancelled = false;
-    listeners.set(id, (event) => {
-      setSteps((current) => ({ ...current, [event.step]: event.state }));
-    });
-    requestAnalysis(saved, attempt > 0)
-      .then((payload) => {
+    async function load(): Promise<SavedInterviewResult | null> {
+      if (!interviewId) return readInterviewResult();
+      const response = await authorizedFetch(`/api/account/interviews/${interviewId}`);
+      if (response.status === 404) return null;
+      const body = (await response.json().catch(() => null)) as { result?: SavedInterviewResult; error?: string } | null;
+      if (!response.ok || !body?.result) throw new Error(body?.error || "This interview could not be opened.");
+      const local = readInterviewResult();
+      if (local?.setup.interviewId === body.result.setup.interviewId && local.turns.length > body.result.turns.length) {
+        return {
+          ...body.result,
+          turns: local.turns,
+          elapsedMs: local.elapsedMs || body.result.elapsedMs,
+          assistance: local.assistance ?? body.result.assistance,
+          pauses: local.pauses ?? body.result.pauses,
+          analysis: body.result.analysis ?? local.analysis,
+        };
+      }
+      return body.result;
+    }
+    void load()
+      .then((saved) => {
         if (cancelled) return;
-        saveInterviewAnalysis(payload.analysis, payload.debug);
-        setResult(readInterviewResult());
-        setPhase("ready");
+        if (!saved) {
+          setMissing(true);
+          return;
+        }
+        saveInterviewResult(saved);
+        setResult(saved);
+        const candidateText = saved.turns
+          .filter((turn) => turn.speaker === "candidate")
+          .map((turn) => turn.text.trim())
+          .join(" ");
+        if (candidateText.length < 40) {
+          setPhase("thin");
+          return;
+        }
+        if (saved.analysis && typeof saved.analysis.overallReadiness === "number" && saved.analysis.summary) {
+          setPhase("ready");
+          return;
+        }
+        const id = saved.setup.interviewId;
+        listeners.set(id, (event) => {
+          setSteps((current) => ({ ...current, [event.step]: event.state }));
+        });
+        return requestAnalysis(saved, attempt > 0).then((payload) => {
+          if (cancelled) return;
+          saveInterviewAnalysis(payload.analysis, payload.debug);
+          setResult(readInterviewResult());
+          setSaveWarning(payload.saved === false);
+          setPhase("ready");
+        });
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
@@ -94,9 +119,9 @@ export function InterviewResults() {
       });
     return () => {
       cancelled = true;
-      listeners.delete(id);
+      if (interviewId) listeners.delete(interviewId);
     };
-  }, [attempt]);
+  }, [attempt, interviewId]);
 
   async function beginPractice(saved: SavedInterviewResult, questions: QuestionFeedback[], target: string) {
     if (practicingRef.current || questions.length === 0) return;
@@ -105,7 +130,7 @@ export function InterviewResults() {
     setPracticeErrorTarget(null);
     setPracticeTarget(target);
     try {
-      const response = await fetch("/api/interview/practice", {
+      const response = await authorizedFetch("/api/interview/practice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -150,7 +175,14 @@ export function InterviewResults() {
     );
   }
 
-  if (!result) return null;
+  if (!result) {
+    return (
+      <PageShell>
+        <h1 className="text-3xl font-semibold tracking-tight">{phase === "error" ? "Couldn't open this interview" : "Loading interview"}</h1>
+        <p className="text-muted">{phase === "error" ? error : "Opening your saved interview."}</p>
+      </PageShell>
+    );
+  }
 
   if (phase === "loading") {
     return <AnalysisLoading states={steps} company={result.setup.company} jobTitle={result.setup.jobTitle} />;
@@ -188,7 +220,39 @@ export function InterviewResults() {
         <p className="text-sm text-muted">
           {interviewModeLabel(result.setup.interviewMode)} · {interviewTypeLabel(result.setup.interviewType)} · {formatDuration(result.elapsedMs)}
         </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {confirmDelete ? (
+            <Button
+              type="button"
+              variant="danger"
+              disabled={deleting}
+              onClick={() => {
+                setDeleting(true);
+                void authorizedFetch(`/api/account/interviews/${result.setup.interviewId}`, { method: "DELETE" })
+                  .then((response) => {
+                    if (!response.ok) throw new Error("delete failed");
+                    router.push("/dashboard");
+                  })
+                  .catch(() => {
+                    setDeleting(false);
+                    setError("This interview could not be deleted.");
+                  });
+              }}
+            >
+              {deleting ? "Deleting…" : "Confirm delete"}
+            </Button>
+          ) : (
+            <Button type="button" variant="ghost" onClick={() => setConfirmDelete(true)}>
+              Delete interview
+            </Button>
+          )}
+        </div>
       </header>
+      {saveWarning ? (
+        <p className="text-sm text-danger" role="alert">
+          This review is on screen, but it could not be saved to your account yet.
+        </p>
+      ) : null}
 
       {phase === "thin" ? (
         <section className="flex flex-col gap-3 rounded-[24px] border border-line bg-card p-6 shadow-[var(--shadow-card)]">
@@ -202,7 +266,7 @@ export function InterviewResults() {
           <h2 className="text-2xl font-semibold tracking-tight">We couldn't finish your analysis yet.</h2>
           <p className="text-muted">
             {error === "We couldn't finish your analysis yet."
-              ? "Your transcript is still saved. You can try the analysis again."
+              ? "Your transcript is saved to your account. You can try the analysis again."
               : error}
           </p>
           <Button
@@ -474,7 +538,7 @@ function requestAnalysis(result: SavedInterviewResult, force: boolean): Promise<
 }
 
 async function runAnalysis(result: SavedInterviewResult): Promise<AnalysisPayload> {
-  const response = await fetch("/api/interview/analyze", {
+  const response = await authorizedFetch("/api/interview/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -511,10 +575,11 @@ async function runAnalysis(result: SavedInterviewResult): Promise<AnalysisPayloa
         error?: string;
         analysis?: InterviewAnalysis;
         debug?: AnalysisDebug;
+        saved?: boolean;
       };
       if (event.step === "error") throw new Error(event.error || "We couldn't finish your analysis yet.");
       if (event.step === "ready" && event.analysis) {
-        payload = { analysis: event.analysis, debug: event.debug };
+        payload = { analysis: event.analysis, debug: event.debug, saved: event.saved };
         continue;
       }
       if (

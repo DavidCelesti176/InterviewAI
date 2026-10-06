@@ -1,3 +1,5 @@
+import { authenticate, isUser } from "@/lib/firebase/auth-server";
+import { appendAssistance } from "@/lib/firebase/data";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { coachQuestion } from "@/lib/interview/coach-question";
 import type { HelpKind } from "@/lib/interview/help-types";
@@ -36,6 +38,8 @@ function readTurns(value: unknown): InterviewTurn[] {
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return jsonError("Unexpected request origin", 403);
   if (!process.env.OPENAI_API_KEY) return jsonError("Set OPENAI_API_KEY on the server", 503);
+  const user = await authenticate(request);
+  if (!isUser(user)) return user;
 
   let body: unknown;
   try {
@@ -54,21 +58,31 @@ export async function POST(request: Request) {
   const question = typeof payload.question === "string" ? clipText(payload.question, 800) : "";
   if (!question) return jsonError("Help is available once a question has been asked.", 400);
 
-  const interview = await getInterview(payload.interviewId.trim());
+  const interview = await getInterview(user.uid, payload.interviewId.trim());
   if (!interview) {
-    return jsonError("This interview is no longer available on the server. You can still resume.", 404);
+    return jsonError("This interview could not be found.", 404);
   }
   if (interview.config.interviewMode !== "practice") {
     return jsonError("Coaching is available in Practice Mode.", 403);
   }
 
   try {
+    const kind = payload.kind as HelpKind;
     const result = await coachQuestion({
       interview,
-      kind: payload.kind as HelpKind,
+      kind,
       question,
       recentTurns: readTurns(payload.turns),
     });
+    try {
+      await appendAssistance(user.uid, payload.interviewId.trim(), {
+        timestampMs: Date.now(),
+        type: kind === "experiences" ? "experience_suggestions" : kind,
+        question,
+      });
+    } catch (saveError) {
+      console.error("Assistance save failed", saveError instanceof Error ? saveError.message : "error");
+    }
     return Response.json({
       help: result.help,
       debug:

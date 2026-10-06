@@ -17,7 +17,13 @@ const interviewTypes = new Set<InterviewType>(["mixed", "hiring-manager", "behav
 const durationChoices = new Set<DurationChoice>(["15", "30", "45", "unsure"]);
 
 export type Submission =
-  | { ok: true; config: InterviewConfig; resumeFileName: string; durationChoice: DurationChoice }
+  | {
+      ok: true;
+      config: InterviewConfig;
+      resumeFileName: string;
+      durationChoice: DurationChoice;
+      resumeBytes: Uint8Array | null;
+    }
   | { ok: false; error: string; status: number };
 
 function field(form: FormData, name: string): string {
@@ -25,7 +31,10 @@ function field(form: FormData, name: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export async function readInterviewSubmission(form: FormData): Promise<Submission> {
+export async function readInterviewSubmission(
+  form: FormData,
+  savedResume?: { fileName: string; text: string },
+): Promise<Submission> {
   const company = field(form, "company");
   const jobTitle = field(form, "jobTitle");
   const jobDescription = field(form, "jobDescription");
@@ -42,6 +51,19 @@ export async function readInterviewSubmission(form: FormData): Promise<Submissio
   if (jobDescription.length > MAX_JOB_DESCRIPTION_CHARS) return { ok: false, error: "The job description is too long.", status: 400 };
   if (!interviewTypes.has(interviewType as InterviewType)) return { ok: false, error: "Choose an interview type.", status: 400 };
   if (!durationChoices.has(duration as DurationChoice)) return { ok: false, error: "Choose an expected interview length.", status: 400 };
+  if (savedResume) {
+    if (savedResume.text.length < MIN_RESUME_TEXT_CHARS) {
+      return { ok: false, error: "That saved resume could not be read. Upload it again.", status: 400 };
+    }
+    return {
+      ok: true,
+      resumeFileName: savedResume.fileName || "resume.pdf",
+      durationChoice: duration as DurationChoice,
+      resumeBytes: null,
+      config: interviewConfig(company, jobTitle, jobDescription, interviewType, interviewMode, duration, savedResume.text),
+    };
+  }
+
   if (!(resume instanceof File) || resume.size === 0) return { ok: false, error: "Upload your resume PDF.", status: 400 };
 
   const pdfName = resume.name.toLowerCase().endsWith(".pdf");
@@ -69,15 +91,28 @@ export async function readInterviewSubmission(form: FormData): Promise<Submissio
     ok: true,
     resumeFileName: resume.name || "resume.pdf",
     durationChoice: duration as DurationChoice,
-    config: {
-      company,
-      jobTitle,
-      jobDescription: clipText(jobDescription, MAX_JOB_DESCRIPTION_CHARS),
-      interviewType: interviewType as InterviewType,
-      interviewMode: isInterviewMode(interviewMode) ? interviewMode : "mock",
-      targetDurationMinutes: durationMinutes(duration as DurationChoice),
-      candidate: { resumeText: clipText(resumeText, MAX_RESUME_TEXT_CHARS) },
-    },
+    resumeBytes: bytes,
+    config: interviewConfig(company, jobTitle, jobDescription, interviewType, interviewMode, duration, resumeText),
+  };
+}
+
+function interviewConfig(
+  company: string,
+  jobTitle: string,
+  jobDescription: string,
+  interviewType: string,
+  interviewMode: string,
+  duration: string,
+  resumeText: string,
+): InterviewConfig {
+  return {
+    company,
+    jobTitle,
+    jobDescription: clipText(jobDescription, MAX_JOB_DESCRIPTION_CHARS),
+    interviewType: interviewType as InterviewType,
+    interviewMode: isInterviewMode(interviewMode) ? interviewMode : "mock",
+    targetDurationMinutes: durationMinutes(duration as DurationChoice),
+    candidate: { resumeText: clipText(resumeText, MAX_RESUME_TEXT_CHARS) },
   };
 }
 

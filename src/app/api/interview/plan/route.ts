@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 
+import { authenticate, isUser } from "@/lib/firebase/auth-server";
+import { saveResumeFile } from "@/lib/firebase/data";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { prepareInterview } from "@/lib/interview/prepare";
 import { readInterviewSubmission } from "@/lib/interview/submission";
@@ -14,6 +16,8 @@ function jsonError(error: string, status: number) {
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return jsonError("Unexpected request origin", 403);
   if (!process.env.OPENAI_API_KEY) return jsonError("Set OPENAI_API_KEY on the server", 503);
+  const user = await authenticate(request);
+  if (!isUser(user)) return user;
 
   let form: FormData;
   try {
@@ -26,7 +30,16 @@ export async function POST(request: Request) {
   if (!submission.ok) return jsonError(submission.error, submission.status);
 
   try {
+    if (submission.resumeBytes) {
+      await saveResumeFile({
+        uid: user.uid,
+        fileName: submission.resumeFileName,
+        bytes: submission.resumeBytes,
+        parsedText: submission.config.candidate.resumeText,
+      });
+    }
     const prepared = await prepareInterview({
+      uid: user.uid,
       config: submission.config,
       resumeFileName: submission.resumeFileName,
       durationChoice: submission.durationChoice,

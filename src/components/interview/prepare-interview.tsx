@@ -12,6 +12,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProgressSteps } from "@/components/ui/progress-steps";
 import { StatusRow } from "@/components/ui/status-row";
+import { authorizedFetch } from "@/lib/account/client";
 import { readInterviewSetup, saveInterviewSetup } from "@/lib/interview/browser-state";
 import { interviewModeLabel, interviewTypeLabel } from "@/lib/interview/labels";
 
@@ -73,6 +74,11 @@ export function PrepareInterview() {
           const next = { ...setup, interviewerProfileId: id };
           saveInterviewSetup(next);
           setSetup(next);
+          void authorizedFetch(`/api/account/interviews/${setup.interviewId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ interviewerProfileId: id }),
+          }).catch(() => undefined);
         }}
       />
       <Card className="flex flex-col gap-2 p-6">

@@ -1,5 +1,6 @@
 import { rubricAnchors } from "@/lib/interview/analysis-rubric";
 import { levelLabel } from "@/lib/interview/difficulty";
+import { openingAnswerSeconds } from "@/lib/interview/interview-phase";
 import { interviewTypeLabel } from "@/lib/interview/labels";
 import type { InterviewBlueprint, InterviewConfig, InterviewTurn } from "@/lib/interview/types";
 
@@ -10,6 +11,8 @@ Evaluate the candidate relative to the role seniority, the job description, the 
 This is a coaching read of a practice interview. Do not estimate whether the candidate will get the job, pass a screen, or receive an offer.
 
 Do not reward long answers. Do not punish a short answer that was complete. Use what was actually said. Quote or closely paraphrase the transcript. Avoid generic praise and harsh language. If the conversation does not show a skill, say that and keep the score near the middle of the scale.
+
+If the opening or tell-me-about-yourself answer runs past about 90 seconds, say so on that question card. A useful early-career target is roughly 60–90 seconds. Note whether extra detail buried the point and whether project mechanics should have waited for a follow-up. This is coaching, not a hard cutoff, and a long coherent answer is not the only issue.
 
 If the candidate used coaching, do not score that answer as fully unassisted, and do not punish them for asking. Notice whether they applied the help. Practice recommendations can reflect repeated help, such as identifying what a question is testing or structuring an answer. Pauses are not a penalty. For practice mode, emphasize what they learned and where they needed support. For a mock interview, describe the performance without coaching. If a mock included a pause, mention that it was not fully unassisted. Set assistanceNote to one or two sentences about that pattern, or an empty string when no coaching was used.
 
@@ -26,6 +29,11 @@ export function analysisInput(
   elapsedMs: number,
   assistanceContext = "",
 ): string {
+  const openingSeconds = openingAnswerSeconds(turns);
+  const openingNote =
+    openingSeconds !== null && openingSeconds >= 90
+      ? `Measured opening answer: about ${Math.round(openingSeconds)} seconds, from when the candidate started until the interviewer spoke again. If it was a background or tell-me-about-yourself answer, coach toward roughly 60–90 seconds on that card.`
+      : "";
   const competencies = blueprint.competencyPriorities
     .map((item) => `${item.competency} (${item.priority})`)
     .join("; ");
@@ -50,6 +58,7 @@ Do not treat missing executive influence, people management, or enterprise strat
       : ""
   }
 Elapsed active time: ${Math.round(elapsedMs / 1000)} seconds
+${openingNote}
 ${assistanceContext}
 Competencies: ${competencies || "None listed"}
 Role topics: ${topics || "None listed"}

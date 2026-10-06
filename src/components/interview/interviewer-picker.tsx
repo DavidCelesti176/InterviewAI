@@ -16,7 +16,7 @@ export function InterviewerPicker({
         <span className="text-xl font-semibold tracking-tight">Choose your interviewer</span>
         <span className="text-sm text-muted">Pick who you&apos;d like to practice with.</span>
       </legend>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
         {interviewerProfiles.map((profile) => {
           const selected = profile.id === value;
           return (

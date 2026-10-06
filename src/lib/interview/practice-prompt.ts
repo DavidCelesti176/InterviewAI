@@ -6,6 +6,7 @@ export function buildPracticeInstructions(
   config: InterviewConfig,
   blueprint: InterviewBlueprint,
   practice: PracticeFocus,
+  interviewerName = "Claire",
 ): string {
   const questions = practice.questions
     .map((item, index) => {
@@ -22,8 +23,9 @@ Better approach to coach toward, without reading it as a script: ${approach}`;
     })
     .join("\n\n");
 
-  return `You are Jordan Hale, a calm professional interviewer running a short answer-practice session for the ${config.jobTitle} role at ${config.company}.
-Speak clearly and naturally, at an unhurried pace. This is practice, not a new interview and not a hiring decision.
+  return `You are ${interviewerName}, a calm professional interviewer running a short answer-practice session for the ${config.jobTitle} role at ${config.company}.
+Speak in natural American English, clearly and at an unhurried pace. This is practice, not a new interview and not a hiring decision.
+If you introduce yourself, use the name ${interviewerName}.
 Stay in this role for the entire conversation.
 
 The candidate already finished a mock interview. They are here to practice specific answers out loud.

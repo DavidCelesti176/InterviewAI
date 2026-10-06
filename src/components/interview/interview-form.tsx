@@ -11,6 +11,8 @@ import { ChoiceCard } from "@/components/ui/choice-card";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { ProgressSteps } from "@/components/ui/progress-steps";
 import { UploadZone } from "@/components/ui/upload-zone";
+import { authorizedFetch } from "@/lib/account/client";
+import type { ResumeCard } from "@/lib/account/types";
 import { readInterviewDraft, saveInterviewDraft, saveInterviewSetup, savePreparationDebug } from "@/lib/interview/browser-state";
 import { durationOptions, interviewTypeOptions } from "@/lib/interview/labels";
 import {
@@ -39,6 +41,8 @@ export function InterviewForm() {
   const [jobListing, setJobListing] = useState("");
   const [readListing, setReadListing] = useState("");
   const [resumeName, setResumeName] = useState<string | null>(null);
+  const [savedResumes, setSavedResumes] = useState<ResumeCard[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState("");
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +61,23 @@ export function InterviewForm() {
     if (draft.jobListing && draft.jobDescription.trim().length >= MIN_JOB_DESCRIPTION_CHARS) {
       setReadListing(draft.jobListing.trim());
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void authorizedFetch("/api/account/resumes")
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const body = (await response.json()) as { resumes?: ResumeCard[] };
+        return body.resumes ?? [];
+      })
+      .then((items) => {
+        if (!cancelled) setSavedResumes(items);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function currentDraft() {
@@ -84,7 +105,7 @@ export function InterviewForm() {
     }
     setExtracting(true);
     try {
-      const response = await fetch("/api/interview/listing", {
+      const response = await authorizedFetch("/api/interview/listing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listing }),
@@ -149,8 +170,8 @@ export function InterviewForm() {
       setError("Add the company and job title from that listing.");
       return;
     }
-    if (step === 1 && !resumeRef.current?.files?.[0]) {
-      setError("Upload your resume PDF.");
+    if (step === 1 && !selectedResumeId && !resumeRef.current?.files?.[0]) {
+      setError("Upload your resume PDF or choose a saved one.");
       return;
     }
     setError(null);
@@ -162,10 +183,17 @@ export function InterviewForm() {
     setError(null);
     const form = new FormData(event.currentTarget);
     const resume = form.get("resume");
-    if (!(resume instanceof File) || resume.size === 0) {
-      setError("Upload your resume PDF.");
+    const usingSaved = Boolean(selectedResumeId) && (!(resume instanceof File) || resume.size === 0);
+    if (!usingSaved && (!(resume instanceof File) || resume.size === 0)) {
+      setError("Upload your resume PDF or choose a saved one.");
       setStep(1);
       return;
+    }
+    if (usingSaved) {
+      form.set("resumeId", selectedResumeId);
+      form.delete("resume");
+    } else {
+      form.delete("resumeId");
     }
     if (!roleReady()) {
       setError("Paste the full job listing, then read it.");
@@ -179,7 +207,7 @@ export function InterviewForm() {
     setPrepareSteps(markStep(steps, "analyzing_resume", "active"));
     let leaving = false;
     try {
-      const intakeResponse = await fetch("/api/interview/prepare?stage=intake", { method: "POST", body: form });
+      const intakeResponse = await authorizedFetch("/api/interview/prepare?stage=intake", { method: "POST", body: form });
       if (intakeResponse.status === 413) {
         setError("That PDF is too large for the site. Use a file under 6 MB.");
         return;
@@ -213,6 +241,7 @@ export function InterviewForm() {
         ]),
       );
       const finished = await postPrepare("finish", {
+        interviewId: intake.body.interviewId,
         config: intake.body.config,
         resumeFileName: intake.body.resumeFileName,
         durationChoice: intake.body.durationChoice,
@@ -237,7 +266,7 @@ export function InterviewForm() {
         resumeFileName: summary.resumeFileName,
         levelLabel: summary.levelLabel,
         emphasisLabel: summary.emphasisLabel,
-        interviewerProfileId: "jordan",
+        interviewerProfileId: "claire",
       });
       leaving = true;
       router.push("/interview/prepare");
@@ -266,9 +295,13 @@ export function InterviewForm() {
           className="sr-only"
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
-            if (file) void acceptResume(file, "input");
+            if (file) {
+              setSelectedResumeId("");
+              void acceptResume(file, "input");
+            }
           }}
         />
+        <input type="hidden" name="resumeId" value={selectedResumeId} />
         <input type="hidden" name="company" value={company} />
         <input type="hidden" name="jobTitle" value={jobTitle} />
         <input type="hidden" name="jobDescription" value={jobDescription} />
@@ -296,7 +329,38 @@ export function InterviewForm() {
                 <h2 className="text-2xl font-semibold tracking-tight">Give your interviewer some context</h2>
                 <p className="text-muted">A PDF resume is enough. You’ll review everything before the interview starts.</p>
               </div>
-              <UploadZone fileName={resumeName} inputId={resumeInputId} onFile={(file) => void acceptResume(file, "drop")} />
+              {savedResumes.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium">Your resumes</p>
+                  {savedResumes.map((resume) => (
+                    <button
+                      key={resume.id}
+                      type="button"
+                      className={`rounded-[14px] border px-4 py-3 text-left ${selectedResumeId === resume.id ? "border-accent bg-white" : "border-line bg-card"}`}
+                      onClick={() => {
+                        setSelectedResumeId(resume.id);
+                        setResumeName(resume.originalFileName);
+                        if (resumeRef.current) resumeRef.current.value = "";
+                      }}
+                    >
+                      <span className="block text-sm font-medium">{resume.originalFileName}</span>
+                      <span className="block text-xs text-muted">
+                        {resume.lastUsedAt ? `Last used ${new Date(resume.lastUsedAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}` : "Saved resume"}
+                      </span>
+                    </button>
+                  ))}
+                  <p className="text-sm text-muted">Or upload a different resume.</p>
+                </div>
+              ) : null}
+              <UploadZone
+                fileName={selectedResumeId ? null : resumeName}
+                inputId={resumeInputId}
+                onFile={(file) => {
+                  setSelectedResumeId("");
+                  void acceptResume(file, "drop");
+                }}
+              />
+              <p className="text-sm text-muted">Your resume, transcript, and feedback are saved privately to your account.</p>
             </div>
           ) : null}
           {step === 2 ? (
@@ -522,20 +586,21 @@ async function readJsonResponse(response: Response): Promise<{ ok: boolean; body
 }
 
 function postPrepare(stage: string, payload: unknown) {
-  return fetch(`/api/interview/prepare?stage=${stage}`, {
+  return authorizedFetch(`/api/interview/prepare?stage=${stage}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   }).then(readJsonResponse);
 }
 
-function isIntake(value: Record<string, unknown>): value is { config: { company: string; jobTitle: string }; resumeFileName: string; durationChoice: string } {
+function isIntake(value: Record<string, unknown>): value is { interviewId: string; config: { company: string; jobTitle: string }; resumeFileName: string; durationChoice: string } {
   const config = value.config;
   return (
     !!config &&
     typeof config === "object" &&
     typeof (config as { company?: unknown }).company === "string" &&
     typeof (config as { jobTitle?: unknown }).jobTitle === "string" &&
+    typeof value.interviewId === "string" &&
     typeof value.resumeFileName === "string" &&
     typeof value.durationChoice === "string"
   );

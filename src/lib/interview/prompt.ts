@@ -1,4 +1,5 @@
 import { calibrationInstructions } from "@/lib/interview/experience-calibration";
+import { candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
 import type { InterviewBlueprint, InterviewConfig, InterviewType } from "@/lib/interview/types";
 
 const typeGuidance: Record<InterviewType, string> = {
@@ -15,16 +16,16 @@ const typeGuidance: Record<InterviewType, string> = {
 };
 
 function pacing(minutes: number): string {
-  const rapportEnd = Math.max(3, Math.round(minutes * 0.12));
-  const wrap = Math.round(minutes * 0.8);
-  const candidateAt = Math.round(minutes * 0.9);
-  const candidateWindow = Math.max(3, Math.round(minutes * 0.13));
-  return `Target length is about ${minutes} minutes. Do not mention the clock, the target length, or a minute limit.
-Use the first ${rapportEnd} minutes for an accessible opening and a little rapport.
-Through the middle, cover the important ground with roughly 5 to 7 substantial questions across a standard interview, plus selective follow-ups. Depth matters more than asking as many questions as possible.
-After about ${wrap} minutes, stop opening large new topics. Finish the thread you are already in.
-Around ${candidateAt} minutes, invite their questions and leave about ${candidateWindow} minutes for that, then close in about a minute.
-Do not let extra follow-ups push the interview well past the target.`;
+  const notBefore = candidateQuestionsNotBeforeMinutes(minutes);
+  const mains = minutes >= 30 ? "about 5 to 8" : minutes >= 15 ? "about 4 to 6" : "about 3 to 5";
+  return `Target length is about ${minutes} minutes of active conversation. Do not mention the clock.
+Move forward only through INTRO, CORE, LATE_CORE, CANDIDATE_QUESTIONS, CLOSING, and COMPLETE. Never return to an earlier phase.
+Do not invite their questions, and do not say the interview is winding down, before about ${notBefore} minutes. You will be told the active time. Trust that, not a guess about how long it has felt.
+Use one accessible opening question.
+Through the middle, ask ${mains} substantial questions. Let difficulty breathe: easier, medium, at most one follow-up, then a lighter transition before anything harder. Do not stack hard questions or hard follow-ups.
+Around ${notBefore} minutes, finish the current thread instead of opening another deep one. Then invite their questions.
+Once you invite their questions, stay there. Answer what they ask. Do not reopen an earlier topic.
+Cover the high-priority competencies before you close. You do not need every competency, and you do not close after only a few minutes when time remains.`;
 }
 
 function lines(items: string[]): string {
@@ -43,7 +44,7 @@ function difficultyLine(blueprint: InterviewBlueprint): string {
   return `Difficulty is a 1 to 5 scale. 1 is an easy conversational question. 5 is a demanding question about judgment, tradeoffs, or the work itself.
 Opening ${curve.opening}, early ${curve.early}, middle ${curve.middle}, late ${curve.late}.
 Use the number for how complex the question is and how far a follow-up may go. Do not use it as a reason to add more follow-ups.
-Do not jump ahead of this curve. Do not stay at the highest number for question after question. After a demanding question, an easier transition is appropriate. The late phase stays near ${curve.late}. Do not turn the ending into the hardest stretch. ${opening}${fair}`;
+Do not jump ahead of this curve. Do not stay at the highest number for question after question. After a demanding topic, transition to motivation, background, role interest, or another competency instead of raising the pressure again. The late phase stays near ${curve.late}. Do not turn the ending into the hardest stretch. ${opening}${fair}`;
 }
 
 function companyBlock(blueprint: InterviewBlueprint): string {
@@ -60,7 +61,7 @@ ${summary}
 Behavioral emphasis: ${style.behavioralEmphasis}. Technical emphasis: ${style.technicalEmphasis}.${patterns}`;
 }
 
-export function buildInterviewerInstructions(config: InterviewConfig, blueprint: InterviewBlueprint): string {
+export function buildInterviewerInstructions(config: InterviewConfig, blueprint: InterviewBlueprint, interviewerName = "Claire"): string {
   const competencies = blueprint.competencyPriorities
     .map((item) => `- ${item.competency} (${item.priority}): ${item.reason}`)
     .join("\n");
@@ -68,8 +69,9 @@ export function buildInterviewerInstructions(config: InterviewConfig, blueprint:
     .map((item) => `- ${item.topic}: ${item.reason}`)
     .join("\n");
 
-  return `You are Jordan Hale, a calm professional interviewer for the ${config.jobTitle} role at ${config.company}.
-Speak clearly and naturally, at an unhurried pace. Be direct and neutral. Do not sound like a coach or a cheerleader.
+  return `You are ${interviewerName}, a calm professional interviewer for the ${config.jobTitle} role at ${config.company}.
+Speak in natural American English, clearly and at an unhurried pace. Be direct and neutral. Do not sound like a coach or a cheerleader.
+If you introduce yourself, use the name ${interviewerName}.
 You are conducting a live mock interview. Stay in the interviewer role for the entire conversation.
 
 Backchannel policy: Use sparse backchannels. A brief listening sound is fine. Do not talk over the candidate's answer.
@@ -103,7 +105,9 @@ Interview conduct:
 - If it is partial or vague, ask one specific follow-up.
 - If they make an important claim, ask one focused follow-up. Ask a second only when that claim is still unclear and it matters for the role.
 - If they drift off the question, redirect briefly.
-- Most answers get zero or one follow-up. Two on the same topic should be uncommon. Three or more should be rare, and only when the answer is still meaningfully incomplete.
+- Most answers get zero or one follow-up. Use a second only when the answer is vague, missed an important part, the topic is highly relevant, or a measurable claim is still unclear. More than two on one topic should be rare. A sufficient answer can simply be accepted.
+- Stay tied to the job. For reporting or analyst work, ask how the team used it, what insight mattered, and how they would explain it. Do not linger on implementation details unless the job description requires them.
+- If they say only "hello?", "are you there?", or a similar check while you are preparing the next turn, that is not an answer. Continue the interview.
 - When the topic has been covered, close it. Use a short bridge such as "That makes sense" or "Let's shift to teamwork", and vary the wording. Then ask about something you have not already covered.
 - Do not say "Great answer", "Excellent", or "That's amazing".
 - Do not compliment every response. Do not coach, hint at a better answer, or tell them what they should say.

@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 
+import { authenticate, isUser } from "@/lib/firebase/auth-server";
+import { createPreparingInterview, getResume, isRecordId, saveResumeFile, touchResume } from "@/lib/firebase/data";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { analyzeRole } from "@/lib/interview/analyze-role";
 import { finishPreparedInterview, storedRoleAnalysis } from "@/lib/interview/prepare";
@@ -32,6 +34,8 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return jsonError("Unexpected request origin", 403);
   if (!process.env.OPENAI_API_KEY) return jsonError("Set OPENAI_API_KEY on the server", 503);
+  const user = await authenticate(request);
+  if (!isUser(user)) return user;
 
   const stage = new URL(request.url).searchParams.get("stage") || "intake";
 
@@ -43,9 +47,44 @@ export async function POST(request: Request) {
       } catch {
         return jsonError("The interview form could not be read.", 400);
       }
-      const submission = await readInterviewSubmission(form);
+      const resumeIdField = form.get("resumeId");
+      const savedId = typeof resumeIdField === "string" ? resumeIdField.trim() : "";
+      const saved = savedId && isRecordId(savedId) ? await getResume(user.uid, savedId) : null;
+      if (savedId && !saved) return jsonError("That saved resume could not be found. Upload it again.", 404);
+      const submission = await readInterviewSubmission(
+        form,
+        saved ? { fileName: saved.originalFileName, text: saved.parsedText } : undefined,
+      );
       if (!submission.ok) return jsonError(submission.error, submission.status);
+      let resumeId = saved ? savedId : "";
+      if (submission.resumeBytes) {
+        try {
+          const uploaded = await saveResumeFile({
+            uid: user.uid,
+            fileName: submission.resumeFileName,
+            bytes: submission.resumeBytes,
+            parsedText: submission.config.candidate.resumeText,
+          });
+          resumeId = uploaded.id;
+        } catch (error) {
+          console.error("Resume upload failed", error instanceof Error ? error.message : "error");
+          return jsonError("The resume could not be saved. Try again.", 502);
+        }
+      } else if (saved) {
+        await touchResume(user.uid, savedId);
+      }
+      const interviewId = crypto.randomUUID();
+      await createPreparingInterview({
+        uid: user.uid,
+        interviewId,
+        resumeId,
+        resumeFileName: submission.resumeFileName,
+        durationChoice: submission.durationChoice,
+        config: submission.config,
+      });
       return Response.json({
+        interviewId,
+        resumeId,
         config: submission.config,
         resumeFileName: submission.resumeFileName,
         durationChoice: submission.durationChoice,
@@ -83,7 +122,10 @@ export async function POST(request: Request) {
         companyBody && typeof companyBody === "object" && isProfile((companyBody as { profile?: unknown }).profile)
           ? (companyBody as { profile: CompanyInterviewProfile; cacheHit?: boolean })
           : null;
+      const interviewId = typeof body.interviewId === "string" ? body.interviewId.trim() : "";
       const prepared = await finishPreparedInterview({
+        uid: user.uid,
+        interviewId: isRecordId(interviewId) ? interviewId : undefined,
         config,
         resumeFileName,
         durationChoice,

@@ -1,10 +1,10 @@
-export type AvatarState = "idle" | "connecting" | "listening" | "speaking" | "muted" | "ended" | "error";
+export type AvatarState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "muted" | "ended" | "error";
 
 export type MouthState = "closed" | "small" | "medium" | "wide";
 
 export type VisualPersonality = "warm" | "balanced" | "direct" | "executive";
 
-export type HairStyle = "medium" | "waves" | "crop" | "bob";
+export type HairStyle = "short" | "long";
 
 export type JawShape = "round" | "defined";
 

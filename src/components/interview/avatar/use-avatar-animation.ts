@@ -70,7 +70,15 @@ export function useAvatarAnimation(
         if (level) level.textContent = display.toFixed(2);
       }
       const base =
-        stateRef.current === "speaking" ? 0.62 : stateRef.current === "listening" ? 0.4 : stateRef.current === "muted" ? 0.22 : 0.3;
+        stateRef.current === "speaking"
+          ? 0.62
+          : stateRef.current === "thinking"
+            ? 0.48
+            : stateRef.current === "listening"
+              ? 0.4
+              : stateRef.current === "muted"
+                ? 0.22
+                : 0.3;
       node.style.setProperty("--halo", (base + display * 0.38).toFixed(3));
     };
 

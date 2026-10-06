@@ -48,12 +48,8 @@ export function AnimatedInterviewer({
 
       <g className="avatar-head">
         <HairBack style={look.hairStyle} fill={`url(#${id}-hair)`} />
-        {look.hairStyle === "crop" ? (
-          <>
-            <ellipse cx="118" cy="214" rx="12" ry="18" fill={look.skin[2]} />
-            <ellipse cx="282" cy="214" rx="12" ry="18" fill={look.skin[1]} />
-          </>
-        ) : null}
+        <ellipse cx="112" cy="210" rx="14" ry="20" fill={look.skin[2]} />
+        <ellipse cx="288" cy="210" rx="14" ry="20" fill={look.skin[1]} />
         <path d={face} fill={`url(#${id}-skin)`} />
         <path d={face} fill={`url(#${id}-light)`} />
         <ellipse cx="152" cy="232" rx="16" ry="8" fill="#e08b7c" opacity={look.blush} />
@@ -112,56 +108,25 @@ function Mouth({ smile, lip }: { smile: number; lip: string }) {
 }
 
 function HairBack({ style, fill }: { style: HairStyle; fill: string }) {
-  if (style === "crop") {
-    return <path d="M128 168 C122 112 156 72 200 68 C246 72 280 112 274 168 C258 142 230 130 200 130 C170 130 144 142 128 168 Z" fill={fill} />;
-  }
-  if (style === "waves") {
-    return (
-      <path
-        d="M72 210 C62 128 118 52 200 46 C282 52 338 128 328 210 C320 292 290 348 228 362 C208 318 192 318 172 362 C110 348 80 292 72 210 Z"
-        fill={fill}
-      />
-    );
-  }
-  if (style === "bob") {
-    return (
-      <path
-        d="M86 196 C78 118 124 56 200 50 C276 56 322 118 314 196 C308 268 286 324 236 338 L164 338 C114 324 92 268 86 196 Z"
-        fill={fill}
-      />
-    );
+  if (style === "short") {
+    return <path d="M118 198 C110 128 148 52 200 46 C252 52 290 128 282 198 C266 168 244 150 220 146 C200 156 180 156 160 146 C136 150 122 168 118 198 Z" fill={fill} />;
   }
   return (
     <path
-      d="M96 198 C86 122 132 54 200 48 C268 54 314 122 304 198 C298 258 276 304 228 316 L172 316 C124 304 102 258 96 198 Z"
       fill={fill}
+      fillRule="evenodd"
+      d="M104 196 C96 118 136 40 200 34 C264 40 304 118 296 196 C286 286 270 360 246 412 L214 398 C238 328 248 250 234 190 C222 150 210 142 200 142 C190 142 178 150 166 190 C152 250 162 328 186 398 L154 412 C130 360 114 286 104 196 Z"
     />
   );
 }
 
 function HairFront({ style, fill }: { style: HairStyle; fill: string }) {
-  const sheen = <path d="M156 86 C184 74 214 76 242 96" fill="none" stroke="#fff" strokeOpacity="0.22" strokeWidth="7" strokeLinecap="round" />;
-  if (style === "crop") return sheen;
-  if (style === "waves") {
-    return (
-      <g>
-        <path d="M118 168 C142 96 188 78 248 98 C270 112 276 136 266 158 C230 136 170 134 136 164 C122 174 112 176 118 168 Z" fill={fill} />
-        {sheen}
-      </g>
-    );
-  }
-  if (style === "bob") {
-    return (
-      <g>
-        <path d="M122 164 C150 96 198 78 258 108 C274 124 274 146 262 162 C226 140 168 136 140 162 C126 172 114 174 122 164 Z" fill={fill} />
-        {sheen}
-      </g>
-    );
+  if (style === "short") {
+    return <path d="M146 162 C168 128 198 116 230 132 C252 146 258 164 240 172 C210 156 176 154 154 172 C142 164 140 164 146 162 Z" fill={fill} />;
   }
   return (
     <g>
-      <path d="M126 166 C152 98 196 80 246 104 C264 120 268 142 256 160 C222 136 168 134 142 162 C128 172 116 174 126 166 Z" fill={fill} />
-      {sheen}
+      <path d="M148 168 C172 124 220 112 262 148 C244 168 188 174 154 160 C144 154 140 158 148 168 Z" fill={fill} />
     </g>
   );
 }

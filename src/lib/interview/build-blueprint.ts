@@ -2,6 +2,7 @@ import OpenAI from "openai";
 
 import { buildDifficultyCurve, overallDifficulty } from "@/lib/interview/difficulty";
 import { buildExperienceCalibration, screenTheme } from "@/lib/interview/experience-calibration";
+import { candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
 import type {
   CompanyInterviewProfile,
   DifficultyCurve,
@@ -89,11 +90,11 @@ function juniorOpening(level: RoleAnalysis["candidateLevel"]): boolean {
 }
 
 function authoredPacing(level: RoleAnalysis["candidateLevel"], minutes: number, curve: DifficultyCurve): string {
-  const wrap = Math.round(minutes * 0.8);
+  const notBefore = candidateQuestionsNotBeforeMinutes(minutes);
   const levelNote = juniorOpening(level)
-    ? "Start accessible and raise depth gradually."
+    ? "Start accessible. Raise depth through thinking, specificity, and judgment about work they could have done, not through senior authority."
     : "Keep the questions sophisticated and the tone conversational. Harder questions do not mean more follow-ups.";
-  return `Question complexity follows opening ${curve.opening}, early ${curve.early}, middle ${curve.middle}, late ${curve.late}. Ease off between demanding questions instead of holding the top number. ${levelNote} After about ${wrap} minutes, finish the current thread instead of opening another deep one.`;
+  return `Question complexity follows opening ${curve.opening}, early ${curve.early}, middle ${curve.middle}, late ${curve.late}. Let it breathe: easier, medium, one follow-up when needed, then a lighter transition. ${levelNote} Do not invite their questions before about ${notBefore} minutes.`;
 }
 
 function companyStyle(profile: CompanyInterviewProfile): InterviewBlueprint["companyStyle"] {
@@ -180,6 +181,8 @@ ${config.candidate.resumeText}`,
   if (calibration.avoidUnsupportedAuthorityAssumptions) {
     avoid.add("Asking for executive influence, people management, or enterprise strategy the candidate has not had");
   }
+  avoid.add("Inviting candidate questions before the late phase of the interview");
+  avoid.add("Returning to an earlier question after inviting the candidate's questions");
 
   const screenedThemes: string[] = [];
   const followUpGuidance = parsed.followUpGuidance
@@ -225,9 +228,9 @@ ${config.candidate.resumeText}`,
       followUpGuidance.length > 0
         ? followUpGuidance
         : ["Ask what they personally did, or what changed, only when that part of the answer is missing."],
-    behaviorsToAvoid: [...avoid].slice(0, 8),
+    behaviorsToAvoid: [...avoid].slice(0, 10),
     pacingGuidance: authoredPacing(role.candidateLevel, config.targetDurationMinutes, curve),
-    closingStrategy: parsed.closingStrategy,
+    closingStrategy: `${parsed.closingStrategy} Do not invite their questions before about ${candidateQuestionsNotBeforeMinutes(config.targetDurationMinutes)} minutes. Once you do, answer their questions and do not return to an earlier topic.`,
     experienceCalibration: { ...calibration, screenedThemes },
   };
 }

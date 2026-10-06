@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 
+import { authenticate, isUser } from "@/lib/firebase/auth-server";
+import { saveInterviewAnalysis } from "@/lib/firebase/data";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { analyzeInterview, type AnalysisStep } from "@/lib/interview/analyze-interview";
 import type { AssistanceType, InterviewAssistanceEvent } from "@/lib/interview/help-types";
@@ -56,6 +58,8 @@ function readAssistance(value: unknown): InterviewAssistanceEvent[] {
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return jsonError("Unexpected request origin", 403);
   if (!process.env.OPENAI_API_KEY) return jsonError("Set OPENAI_API_KEY on the server", 503);
+  const user = await authenticate(request);
+  if (!isUser(user)) return user;
 
   let body: unknown;
   try {
@@ -73,10 +77,11 @@ export async function POST(request: Request) {
   const turns = readTurns(payload.turns);
   if (!turns) return jsonError("There isn't enough of the conversation to review.", 400);
 
-  console.info("Interview analysis started", payload.interviewId.trim());
-  const interview = await getInterview(payload.interviewId.trim());
+  const interviewId = payload.interviewId.trim();
+  console.info("Interview analysis started", interviewId);
+  const interview = await getInterview(user.uid, interviewId);
   if (!interview) {
-    return jsonError("This interview is no longer available on the server. Your transcript is still saved in this browser.", 404);
+    return jsonError("This interview could not be found.", 404);
   }
 
   const encoder = new TextEncoder();
@@ -96,9 +101,18 @@ export async function POST(request: Request) {
           pausedMs,
           onStep,
         });
+        let saved = false;
+        try {
+          saved = await saveInterviewAnalysis(user.uid, interviewId, result.analysis, {
+            model: result.debug.model,
+          });
+        } catch (saveError) {
+          console.error("Analysis save failed", saveError instanceof Error ? saveError.message : "error");
+        }
         send({
           step: "ready",
           analysis: result.analysis,
+          saved,
           debug: process.env.NODE_ENV === "development" ? result.debug : undefined,
         });
       } catch (error) {

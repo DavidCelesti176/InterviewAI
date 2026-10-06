@@ -1,5 +1,17 @@
 import type { InterviewTurn } from "@/lib/interview/types";
 
+const connectivitySentence = /^(hello|hey|hi|are you there|you there|can you hear me|still there|anyone there)$/i;
+
+export function isConnectivityCheck(text: string): boolean {
+  const parts = text
+    .split(/[.!?]+\s+/)
+    .map((part) => part.replace(/[!?.]+$/g, "").trim())
+    .filter(Boolean);
+  const sentence = parts.at(-1) ?? "";
+  if (!sentence || sentence.length > 40) return false;
+  return connectivitySentence.test(sentence);
+}
+
 export type PacingDiagnostics = {
   mainQuestions: number;
   followUpsByQuestion: number[];
@@ -11,6 +23,7 @@ export type PacingDiagnostics = {
   topicTransitions: number;
   elapsedMs: number;
   candidateQuestionsAtMs: number | null;
+  connectivityChecks: number;
 };
 
 const transitionCue =
@@ -25,6 +38,7 @@ export function pacingDiagnostics(turns: InterviewTurn[], elapsedMs: number): Pa
   let mains = 0;
   let transitions = 0;
   let candidateQuestionsAtMs: number | null = null;
+  const connectivityChecks = turns.filter((turn) => turn.speaker === "candidate" && isConnectivityCheck(turn.text)).length;
 
   for (const turn of questions) {
     if (candidateQuestionsAtMs === null && candidateQuestionCue.test(turn.text)) {
@@ -63,5 +77,6 @@ export function pacingDiagnostics(turns: InterviewTurn[], elapsedMs: number): Pa
     topicTransitions: transitions,
     elapsedMs,
     candidateQuestionsAtMs,
+    connectivityChecks,
   };
 }

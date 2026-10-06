@@ -1,5 +1,10 @@
 const DEFAULT_LIVE_MODEL = "gpt-live-1";
-const DEFAULT_VOICE = "meridian";
+const DEFAULT_VOICE = "gleam";
+
+const interviewerVoices = {
+  claire: { name: "Claire", voice: "gleam" },
+  james: { name: "James", voice: "meridian" },
+} as const;
 const DEFAULT_PLAN_MODEL = "gpt-5.4";
 const DEFAULT_ANALYSIS_MODEL = "gpt-5.4-mini";
 
@@ -12,10 +17,18 @@ export type LiveSessionSettings = {
  * The only place model identifiers are chosen.
  * Server-only: do not import this from client components.
  */
-export function liveSessionSettings(): LiveSessionSettings {
+export function liveSessionSettings(interviewerId?: string): LiveSessionSettings {
   const model = process.env.OPENAI_LIVE_MODEL?.trim() || DEFAULT_LIVE_MODEL;
-  const voice = process.env.OPENAI_LIVE_VOICE?.trim() || DEFAULT_VOICE;
+  const known = interviewerId && interviewerId in interviewerVoices ? interviewerVoices[interviewerId as keyof typeof interviewerVoices] : null;
+  const voice = known?.voice || process.env.OPENAI_LIVE_VOICE?.trim() || DEFAULT_VOICE;
   return { model, voice };
+}
+
+export function interviewerName(interviewerId?: string): string {
+  if (interviewerId && interviewerId in interviewerVoices) {
+    return interviewerVoices[interviewerId as keyof typeof interviewerVoices].name;
+  }
+  return interviewerVoices.claire.name;
 }
 
 export function planModel(): string {

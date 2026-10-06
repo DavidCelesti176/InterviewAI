@@ -1,3 +1,4 @@
+import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { clipText } from "@/lib/interview/limits";
 import type { PracticeQuestion } from "@/lib/interview/practice-types";
@@ -43,6 +44,8 @@ function readQuestions(value: unknown): PracticeQuestion[] | null {
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return jsonError("Unexpected request origin", 403);
+  const user = await authenticate(request);
+  if (!isUser(user)) return user;
 
   let body: unknown;
   try {
@@ -58,24 +61,25 @@ export async function POST(request: Request) {
   const questions = readQuestions(payload.questions);
   if (!questions) return jsonError("Choose an answer to practice.", 400);
 
-  const interview = await getInterview(payload.interviewId.trim());
+  const interview = await getInterview(user.uid, payload.interviewId.trim());
   if (!interview) {
-    return jsonError(
-      "This interview is no longer available on the server. Your review is still saved in this browser.",
-      404,
-    );
+    return jsonError("This interview could not be found.", 404);
   }
 
   const id = crypto.randomUUID();
-  await saveInterview({
-    id,
-    createdAt: Date.now(),
-    resumeFileName: interview.resumeFileName,
-    config: interview.config,
-    blueprint: interview.blueprint,
-    debug: interview.debug,
-    practice: { questions },
-  });
+  await saveInterview(
+    user.uid,
+    {
+      id,
+      createdAt: Date.now(),
+      resumeFileName: interview.resumeFileName,
+      config: interview.config,
+      blueprint: interview.blueprint,
+      debug: interview.debug,
+      practice: { questions },
+    },
+    { status: "ready" },
+  );
 
   return Response.json({ practiceId: id, questionCount: questions.length });
 }

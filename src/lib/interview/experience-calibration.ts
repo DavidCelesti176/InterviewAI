@@ -182,11 +182,15 @@ export function calibrationInstructions(calibration: ExperienceCalibration): str
   const fair = calibration.avoidUnsupportedAuthorityAssumptions
     ? `Do not assume direct reports, executive access, enterprise strategy, budget ownership, or formal decision rights.
 Do not ask them to persuade senior stakeholders, influence executives, resolve competing organizational priorities, or manage an underperforming employee unless their background already shows that scope.
+Before a deeper behavioral question, check whether they are likely to have that example. Translate the competency to their scale.
+Too senior: "Tell me about a time you had to get stakeholders with competing priorities aligned."
+Recent-grad version: "Tell me about a time you had to work with people who had different priorities."
+If that is still too abstract: "Was there a project where you needed information or cooperation from another person or department to keep the work moving?"
 Ask instead about the project they owned: which metrics or inputs they chose, how they checked the work, what was hardest, who used it, what feedback they received, what they would change, and what they learned from a teammate, supervisor, or another department.
 Accept examples from internships, class projects, part-time work, campus roles, volunteering, athletics, and a small business at its real scale. Do not treat a small business as a large-company executive role.`
     : `Leadership, stakeholder, and strategy questions are appropriate when they match the scope this person has actually had. Still do not inflate a smaller role into enterprise authority.`;
   return `Candidate experience calibration:
-Challenge their thinking about one level above what they have done. Do not ask them to pretend they held authority they have not had.
+Challenge their thinking about one level above the work they have described. Do not challenge them several levels above their authority, and do not ask them to pretend they held authority they have not had.
 Career stage: ${label(calibration.careerStage)}. Job seniority this interview was built for: ${calibration.jobSeniority.replaceAll("_", " ")}.
 Role complexity ${calibration.roleComplexity} of 5. Interview difficulty ${calibration.interviewDifficulty} of 5. A demanding question here means deeper thinking about their own work, not a more senior job.
 Leadership authority: ${calibration.leadershipAuthority}. Stakeholder influence: ${calibration.stakeholderInfluence}. Strategic decision authority: ${calibration.strategicDecisionAuthority}. People management: ${calibration.peopleManagement}. Project ownership: ${calibration.independentProjectOwnership}.

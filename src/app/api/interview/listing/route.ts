@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { extractJobListing } from "@/lib/interview/listing";
 import { MAX_JOB_LISTING_CHARS, MIN_JOB_LISTING_CHARS } from "@/lib/interview/limits";
@@ -16,6 +17,8 @@ export async function POST(request: Request) {
   if (!isSameOrigin(request)) {
     return jsonError("Unexpected request origin", 403);
   }
+  const user = await authenticate(request);
+  if (!isUser(user)) return user;
   if (!process.env.OPENAI_API_KEY) {
     return jsonError("Set OPENAI_API_KEY on the server", 503);
   }
