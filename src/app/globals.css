@@ -408,7 +408,78 @@ body {
   }
 }
 
+@keyframes landing-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes landing-line {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes landing-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes landing-blink {
+  0%,
+  88%,
+  100% {
+    transform: scaleY(0);
+  }
+  94% {
+    transform: scaleY(1);
+  }
+}
+
+.landing-still {
+  display: none;
+}
+
+.landing-bar {
+  transform-origin: center bottom;
+  animation: landing-bar 0.85s ease-in-out infinite;
+}
+
+.landing-line {
+  animation: landing-line 420ms ease;
+}
+
+.landing-pulse {
+  animation: landing-pulse 1.4s ease-in-out infinite;
+}
+
+.landing-portrait .avatar-lid {
+  animation: landing-blink 5.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .landing-motion {
+    display: none;
+  }
+
+  .landing-still {
+    display: block;
+  }
+
   .step-enter,
   .skill-bar,
   .orb-breathe,
@@ -423,7 +494,11 @@ body {
   .avatar-body,
   .avatar-lid,
   .avatar-brow,
-  .avatar-halo {
+  .avatar-halo,
+  .landing-bar,
+  .landing-line,
+  .landing-pulse,
+  .landing-portrait .avatar-lid {
     animation: none;
   }
 

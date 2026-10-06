@@ -8,6 +8,7 @@ import type { ProfessionalStory } from "@/lib/story/types";
 import type { InterviewAnalysis } from "@/lib/interview/analysis-types";
 import type { SavedInterviewResult } from "@/lib/interview/browser-state";
 import type { InterviewAssistanceEvent, InterviewPauseEvent } from "@/lib/interview/help-types";
+import { canReplayStatus, clonedInterview, replayQuestionLines } from "@/lib/interview/replay";
 import type { StoredInterview } from "@/lib/interview/store";
 import type { DurationChoice, InterviewTurn } from "@/lib/interview/types";
 import { getAdminApp } from "@/lib/firebase/admin";
@@ -258,6 +259,32 @@ export async function readInterviewResult(uid: string, interviewId: string): Pro
     assistance: readAssistance(data.assistance),
     analysis: analysis ?? undefined,
   };
+}
+
+export async function replaySavedInterview(
+  uid: string,
+  interviewId: string,
+): Promise<{ setup: SavedInterviewResult["setup"]; practiceQuestions: string[] } | null> {
+  if (!isRecordId(interviewId)) return null;
+  const snap = await (await interviewRef(uid, interviewId)).get();
+  if (!snap.exists) return null;
+  const data = snap.data() ?? {};
+  if (!canReplayStatus(statusOf(data.status))) return null;
+  const record = snap.get("record");
+  if (!isStoredInterview(record)) return null;
+  const id = crypto.randomUUID();
+  const next = clonedInterview(record, id, Date.now());
+  await saveInterview(uid, next, {
+    status: "ready",
+    resumeId: typeof data.resumeId === "string" ? data.resumeId : null,
+    durationChoice: text(data.durationChoice, 20) || "30",
+    levelLabel: text(data.levelLabel, 80),
+    emphasisLabel: text(data.emphasisLabel, 80),
+    interviewerProfileId: text(data.interviewerProfileId, 40) || "claire",
+  });
+  const saved = await readInterviewResult(uid, id);
+  if (!saved) return null;
+  return { setup: saved.setup, practiceQuestions: replayQuestionLines(next) };
 }
 
 function setupFrom(interviewId: string, data: DocumentData): SavedInterviewResult["setup"] | null {

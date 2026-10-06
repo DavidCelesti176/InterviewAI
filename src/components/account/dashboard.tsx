@@ -13,7 +13,7 @@ import { deleteOwnedInterview, listOwnedInterviews } from "@/lib/account/intervi
 import type { InterviewCard, InterviewStatusName } from "@/lib/account/types";
 import { readSavedStory } from "@/lib/story/client";
 import type { ProfessionalStory } from "@/lib/story/types";
-import { saveInterviewSetup, type InterviewSetup } from "@/lib/interview/browser-state";
+import { saveInterviewSetup, savePracticeSetup, type InterviewSetup } from "@/lib/interview/browser-state";
 import type { SavedInterviewResult } from "@/lib/interview/browser-state";
 import { interviewModeLabel } from "@/lib/interview/labels";
 
@@ -147,32 +147,76 @@ export function Dashboard() {
 function InterviewAction({ item }: { item: InterviewCard }) {
   const router = useRouter();
   const [opening, setOpening] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const replayable = item.status === "complete" || item.status === "in_progress" || item.status === "failed" || item.status === "analyzing";
 
   async function resume() {
     setOpening(true);
+    setActionError("");
     try {
       const response = await authorizedFetch(`/api/account/interviews/${item.id}`);
       const body = (await response.json()) as { result?: SavedInterviewResult; error?: string };
       if (!response.ok || !body.result) throw new Error(body.error || "This interview could not be opened.");
       saveInterviewSetup(body.result.setup satisfies InterviewSetup);
       router.push("/interview/prepare");
-    } catch {
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : "This interview could not be opened.");
       setOpening(false);
     }
   }
 
-  if (item.status === "ready") {
-    return (
-      <Button type="button" variant="secondary" disabled={opening} onClick={() => void resume()}>
-        {opening ? "Opening…" : "Resume Interview"}
-      </Button>
-    );
+  async function practiceAgain() {
+    setOpening(true);
+    setActionError("");
+    try {
+      const response = await authorizedFetch(`/api/account/interviews/${item.id}/replay`, { method: "POST" });
+      const body = (await response.json()) as { setup?: InterviewSetup; practiceQuestions?: string[]; error?: string };
+      if (!response.ok || !body.setup) throw new Error(body.error || "This interview could not be opened again.");
+      if (body.practiceQuestions && body.practiceQuestions.length > 0) {
+        savePracticeSetup({
+          interviewId: body.setup.interviewId,
+          company: body.setup.company,
+          jobTitle: body.setup.jobTitle,
+          interviewType: body.setup.interviewType,
+          interviewerProfileId: body.setup.interviewerProfileId,
+          questions: body.practiceQuestions,
+        });
+        router.push("/interview/practice");
+        return;
+      }
+      saveInterviewSetup(body.setup);
+      router.push("/interview/prepare");
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : "This interview could not be opened again.");
+      setOpening(false);
+    }
   }
-  if (item.status === "preparing") return null;
+
   return (
-    <ButtonLink href={`/interview/${item.id}/results`} variant="secondary">
-      View Results
-    </ButtonLink>
+    <div className="flex flex-col items-start gap-2">
+      <div className="flex flex-wrap gap-2">
+        {item.status === "ready" ? (
+          <Button type="button" variant="secondary" disabled={opening} onClick={() => void resume()}>
+            {opening ? "Opening…" : "Resume Interview"}
+          </Button>
+        ) : null}
+        {replayable ? (
+          <Button type="button" disabled={opening} onClick={() => void practiceAgain()}>
+            {opening ? "Opening…" : "Practice again"}
+          </Button>
+        ) : null}
+        {item.status !== "ready" && item.status !== "preparing" ? (
+          <ButtonLink href={`/interview/${item.id}/results`} variant="secondary">
+            View Results
+          </ButtonLink>
+        ) : null}
+      </div>
+      {actionError ? (
+        <p className="text-sm text-danger" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
