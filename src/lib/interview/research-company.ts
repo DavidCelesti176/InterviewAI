@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 
-import { readCompanyProfile, writeCompanyProfile } from "@/lib/company/profile-cache";
+import { readCompanyProfile, rememberCompanyProfile, writeCompanyProfile } from "@/lib/company/profile-cache";
+import { readStoredCompanyProfile, writeStoredCompanyProfile } from "@/lib/company/profile-store";
 import type { CompanyInterviewProfile } from "@/lib/interview/types";
 import { planModel, planReasoning, planRequestTimeoutMs } from "@/lib/live/config";
 
@@ -20,6 +21,10 @@ const profileSchema = {
     interviewerToneGuidance: { type: "string" },
     followUpStyle: { type: "string" },
     processNotes: { type: "array", items: { type: "string" } },
+    answerStructure: { type: "string", enum: ["none", "star", "other"] },
+    answerStructureNote: { type: "string" },
+    interviewPhilosophy: { type: "string" },
+    officialPatterns: { type: "array", items: { type: "string" } },
     sources: {
       type: "array",
       items: {
@@ -28,10 +33,11 @@ const profileSchema = {
         properties: {
           title: { type: "string" },
           url: { type: "string" },
-          sourceType: { type: "string", enum: ["official", "candidate_report", "third_party"] },
-          publishedAt: { type: "string" },
-        },
-        required: ["title", "url", "sourceType", "publishedAt"],
+        sourceType: { type: "string", enum: ["official", "candidate_report", "third_party"] },
+        sourceWeight: { type: "string", enum: ["official", "official_prep", "candidate_report", "community"] },
+        publishedAt: { type: "string" },
+      },
+      required: ["title", "url", "sourceType", "sourceWeight", "publishedAt"],
       },
     },
   },
@@ -47,9 +53,13 @@ const profileSchema = {
     "commonCompetencies",
     "interviewerToneGuidance",
     "followUpStyle",
-    "processNotes",
-    "sources",
-  ],
+      "processNotes",
+      "answerStructure",
+      "answerStructureNote",
+      "interviewPhilosophy",
+      "officialPatterns",
+      "sources",
+    ],
 } as const;
 
 type ResearchNotes = {
@@ -73,6 +83,10 @@ function emptyProfile(company: string, summary: string): CompanyInterviewProfile
     interviewerToneGuidance: "",
     followUpStyle: "",
     processNotes: [],
+    answerStructure: "none",
+    answerStructureNote: "",
+    interviewPhilosophy: "",
+    officialPatterns: [],
     sources: [],
   };
 }
@@ -114,7 +128,7 @@ async function researchProfile(company: string, jobTitle: string): Promise<Compa
     tools: [{ type: "web_search", search_context_size: "low" }],
     include: ["web_search_call.action.sources"],
     instructions:
-      "Research how this company interviews candidates, then return one cautious profile. Prefer official careers and interview-preparation pages, then recent consistent candidate reports. Treat one anecdote as weak. Do not invent a process, a question, or a date. Use unknown when evidence is missing and low confidence when evidence is thin or conflicting. Do not claim the company always asks something. Only include source URLs that this search actually opened. Use an empty string when a date is unknown. Return at most 5 patterns, 5 competencies, 4 process notes, and 6 sources.",
+      "Research how this company interviews candidates, then return one cautious profile. Weigh sources in this order: official careers or interview pages, official recruiting documents, company-published candidate preparation, recent consistent candidate reports, then community anecdotes. Official material outweighs one anecdote. If the employer publishes sample questions, STAR guidance, or preparation tips, summarize the pattern, the competencies, and the preferred answer structure. Do not copy sample questions word for word. Put those patterns in officialPatterns, not as a script. If nothing official is found, leave answerStructure as none, keep confidence low, and do not invent a company ritual. Use unknown when evidence is missing. Only include source URLs that this search actually opened. Use an empty string when a date is unknown. Return at most 5 patterns, 5 official patterns, 5 competencies, 4 process notes, and 6 sources.",
     input: `Company: ${company}
 Role being prepared: ${jobTitle}
 
@@ -142,6 +156,7 @@ Find credible evidence about the interview process, format, behavioral versus te
     commonQuestionPatterns: Array.isArray(parsed.commonQuestionPatterns) ? parsed.commonQuestionPatterns.slice(0, 5) : [],
     commonCompetencies: Array.isArray(parsed.commonCompetencies) ? parsed.commonCompetencies.slice(0, 5) : [],
     processNotes: Array.isArray(parsed.processNotes) ? parsed.processNotes.slice(0, 4) : [],
+    officialPatterns: Array.isArray(parsed.officialPatterns) ? parsed.officialPatterns.slice(0, 5) : [],
     sources: sources.filter((source) => source?.url && allowed.has(source.url)).slice(0, 6),
   };
 }
@@ -152,6 +167,11 @@ export async function researchCompany(
 ): Promise<{ profile: CompanyInterviewProfile; cacheHit: boolean }> {
   const cached = readCompanyProfile(company);
   if (cached) return cached;
+  const stored = await readStoredCompanyProfile(company);
+  if (stored) {
+    rememberCompanyProfile(stored.profile, stored.expiresAt);
+    return { profile: stored.profile, cacheHit: true };
+  }
 
   try {
     const profile = await researchProfile(company, jobTitle);
@@ -159,6 +179,11 @@ export async function researchCompany(
       return { profile: emptyProfile(company, "No reliable public interview guidance was found."), cacheHit: false };
     }
     writeCompanyProfile(profile);
+    try {
+      await writeStoredCompanyProfile(profile);
+    } catch (error) {
+      console.error("Company profile cache write failed", error instanceof Error ? error.message : "error");
+    }
     return { profile, cacheHit: false };
   } catch (error) {
     console.error("Company research failed", error instanceof Error ? `${error.name}: ${error.message}` : "error");

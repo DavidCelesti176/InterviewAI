@@ -5,7 +5,7 @@ export type InterviewType =
   | "recruiter"
   | "role-specific";
 
-export type DurationChoice = "15" | "30" | "45" | "unsure";
+export type DurationChoice = "10" | "15" | "30" | "45" | "unsure";
 
 export type InterviewMode = "practice" | "mock";
 
@@ -135,6 +135,10 @@ export interface DifficultyCurve {
   late: number;
 }
 
+export type AnswerStructureKind = "none" | "star" | "other";
+
+export type SourceWeight = "official" | "official_prep" | "candidate_report" | "community";
+
 export interface CompanyInterviewProfile {
   company: string;
   confidence: Confidence;
@@ -150,10 +154,15 @@ export interface CompanyInterviewProfile {
   interviewerToneGuidance: string;
   followUpStyle: string;
   processNotes: string[];
+  answerStructure: AnswerStructureKind;
+  answerStructureNote: string;
+  interviewPhilosophy: string;
+  officialPatterns: string[];
   sources: Array<{
     title: string;
     url: string;
     sourceType: "official" | "candidate_report" | "third_party";
+    sourceWeight: SourceWeight;
     publishedAt: string;
   }>;
 }
@@ -194,6 +203,16 @@ export interface InterviewBlueprint {
   pacingGuidance: string;
   closingStrategy: string;
   experienceCalibration: ExperienceCalibration;
+  coverage: Array<{
+    id: string;
+    label: string;
+    priority: "low" | "medium" | "high";
+    role: "intended" | "backup" | "skip";
+    evidence: string;
+    framework: "star" | "motivation" | "structured_reasoning" | "direct";
+    reason: string;
+  }>;
+  privateFlow: string;
 }
 
 export interface PreparationDebug {

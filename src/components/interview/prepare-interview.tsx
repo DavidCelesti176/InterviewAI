@@ -23,10 +23,22 @@ export function PrepareInterview() {
   const [microphoneReady, setMicrophoneReady] = useState(false);
   const [speaker, setSpeaker] = useState("Default speakers");
   const [online, setOnline] = useState(true);
+  const [checklist, setChecklist] = useState<Array<{ id: string; label: string; done: boolean }>>([]);
+  const [questionsReady, setQuestionsReady] = useState(false);
+  const [roomQuiet, setRoomQuiet] = useState(false);
 
   useEffect(() => {
-    setSetup(readInterviewSetup());
+    const current = readInterviewSetup();
+    setSetup(current);
     setReady(true);
+    if (current?.interviewId) {
+      void authorizedFetch(`/api/account/stories?interviewId=${encodeURIComponent(current.interviewId)}`)
+        .then(async (response) => {
+          const body = (await response.json().catch(() => null)) as { checklist?: Array<{ id: string; label: string; done: boolean }> } | null;
+          if (response.ok && body?.checklist) setChecklist(body.checklist);
+        })
+        .catch(() => undefined);
+    }
     setOnline(navigator.onLine);
     let cancelled = false;
     void navigator.mediaDevices
@@ -102,6 +114,27 @@ export function PrepareInterview() {
           ))}
         </ul>
         <p className="text-sm text-muted">Resume prepared: {setup.resumeFileName}</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium">Before you start</p>
+        <ul className="flex flex-col gap-1">
+          {checklist.map((item) => (
+            <li key={item.id} className="text-sm text-muted">
+              {item.done ? "Ready" : "Still open"} · {item.label}
+            </li>
+          ))}
+        </ul>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={questionsReady} onChange={(event) => setQuestionsReady(event.target.checked)} />
+          Questions for the interviewer
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={roomQuiet} onChange={(event) => setRoomQuiet(event.target.checked)} />
+          Quiet room
+        </label>
+        <ButtonLink href="/interview-stories" variant="secondary">
+          Your Interview Stories
+        </ButtonLink>
       </div>
       <div className="flex flex-col gap-3">
         <MicrophoneCheck onReady={setMicrophoneReady} />

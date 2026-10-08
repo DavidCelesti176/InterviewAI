@@ -53,6 +53,10 @@ service cloud.firestore {
   }
 
   match /databases/{database}/documents {
+    match /companyProfiles/{companyId} {
+      allow read, write: if false;
+    }
+
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null
@@ -61,14 +65,30 @@ service cloud.firestore {
         && !request.resource.data.keys().hasAny(['password', 'passwordHash']);
       allow delete: if false;
 
-      match /interviews/{interviewId} {
-        allow read, delete: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
-          && request.auth.uid == userId
-          && request.resource.data.userId == userId;
+      match /billing/{billingId} {
+        allow read, write: if false;
 
         match /{document=**} {
-          allow read, write: if request.auth != null && request.auth.uid == userId;
+          allow read, write: if false;
+        }
+      }
+
+      match /interviews/{interviewId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update, delete: if false;
+
+        match /turns/{turnId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          allow write: if false;
+        }
+
+        match /assistance/{assistanceId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          allow write: if false;
+        }
+
+        match /analysis/{analysisId} {
+          allow read, write: if false;
         }
       }
 
@@ -93,6 +113,10 @@ service cloud.firestore {
           && request.auth.uid == userId
           && storyId == "primary"
           && storyDocument();
+      }
+
+      match /interviewStories/{storyId} {
+        allow read, write: if false;
       }
     }
   }

@@ -53,6 +53,7 @@ export function buildContinueInstruction(input: {
   targetMinutes: number;
   turns: InterviewTurn[];
   pendingCandidateText?: string;
+  interviewMode?: "practice" | "mock";
 }): string {
   const minutes = Math.max(0, Math.round(input.elapsedMs / 60_000));
   const target = input.targetMinutes > 0 ? input.targetMinutes : 30;
@@ -81,7 +82,7 @@ If they are finished, close warmly. Do not ask another interview question.`;
 
   const heard = connectivity
     ? `Their latest words were only a connectivity check, not an answer. Ignore that check. Continue from the answer they already gave, or ask the next question if you had not responded yet.`
-    : `If the answer was complete, give a brief neutral acknowledgment and move on. Do not add a follow-up only because another good question is possible. If they are stuck because the question assumed more responsibility than they have had, rephrase it once into a project, a teammate, or a supervisor, then listen.`;
+    : `If the answer was complete, give a brief neutral acknowledgment and move on. Do not add a follow-up only because another good question is possible. Use a follow-up only when a past-experience answer is missing a specific example, what they personally did, the result, or, for a failure, what they learned. Do not force motivation or hypothetical answers into that shape. ${rescueLine(input.interviewMode)}`;
 
   return `Active time is about ${minutes} minutes of a ${target} minute interview. Phase: ${phase === "INTRO" ? "CORE" : phase}.
 ${clock}
@@ -90,4 +91,11 @@ ${followUpNote}
 ${heard}
 Challenge thinking about their own work. Do not ask for senior authority they have not had.
 Ask one question, then wait.`;
+}
+
+function rescueLine(mode: "practice" | "mock" | undefined): string {
+  if (mode === "practice") {
+    return "If they cannot find an example, you may once say: Think of one specific situation from work, school, athletics, a project, or your business. Do not invent the story.";
+  }
+  return "If they cannot answer, allow a thinking pause, rephrase once if the question assumed more responsibility than they have had, and then move on. Do not coach them into the answer.";
 }

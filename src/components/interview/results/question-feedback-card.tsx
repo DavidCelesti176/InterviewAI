@@ -1,6 +1,7 @@
 "use client";
 
 import type { QuestionFeedback } from "@/lib/interview/analysis-types";
+import type { StarCoverage } from "@/lib/interview/star";
 import { Button } from "@/components/ui/button";
 
 export function QuestionFeedbackCard({
@@ -35,6 +36,8 @@ export function QuestionFeedbackCard({
       </summary>
       <div className="flex flex-col gap-5 border-t border-line px-6 py-5">
         {coaching ? <p className="text-sm leading-relaxed text-muted">{coaching}</p> : null}
+        {feedback.framework === "star" && feedback.starCoverage ? <CoverageLine coverage={feedback.starCoverage} /> : null}
+        {feedback.recommendedStory ? <p className="text-sm text-muted">Story to practice: {feedback.recommendedStory}</p> : null}
         <FeedbackList title="What worked" items={feedback.whatWorked} />
         <FeedbackList title="What held it back" items={feedback.whatHeldItBack} />
         {feedback.betterApproach ? (
@@ -66,6 +69,17 @@ export function QuestionFeedbackCard({
       </div>
     </details>
   );
+}
+
+function CoverageLine({ coverage }: { coverage: StarCoverage }) {
+  const parts = [
+    `Situation ${coverage.situation}`,
+    `Task ${coverage.task}`,
+    `Action ${coverage.action}`,
+    `Result ${coverage.result}`,
+  ];
+  if (coverage.learning !== "not_applicable") parts.push(`Learning ${coverage.learning}`);
+  return <p className="text-sm text-muted">{parts.join(" · ")}</p>;
 }
 
 function FeedbackList({ title, items }: { title: string; items: string[] }) {

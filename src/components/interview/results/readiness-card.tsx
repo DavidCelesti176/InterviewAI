@@ -22,6 +22,7 @@ export function ReadinessCard({ analysis }: { analysis: InterviewAnalysis }) {
         <p className="text-sm font-medium text-accent">Interview readiness</p>
         <h2 className="text-3xl font-semibold tracking-tight">{readinessTitle(analysis.overallLabel)}</h2>
         <p className="max-w-2xl text-lg leading-relaxed">{analysis.summary}</p>
+        {analysis.coachingLine ? <p className="max-w-2xl text-sm leading-relaxed text-muted">{analysis.coachingLine}</p> : null}
         <p className="text-sm text-muted">A coaching score for this practice interview.</p>
       </div>
     </section>

@@ -27,6 +27,15 @@ export interface QuestionFeedback {
   betterApproach: string;
   exampleImprovedAnswer: string;
   recommendedForPractice: boolean;
+  framework?: "star" | "motivation" | "structured_reasoning" | "direct";
+  starCoverage?: {
+    situation: "missing" | "weak" | "clear";
+    task: "missing" | "weak" | "clear";
+    action: "missing" | "weak" | "clear";
+    result: "missing" | "weak" | "clear";
+    learning: "not_applicable" | "missing" | "weak" | "clear";
+  } | null;
+  recommendedStory?: string;
 }
 
 export interface SpeakingMetrics {
@@ -66,6 +75,7 @@ export interface InterviewAnalysis {
   speakingMetrics: SpeakingMetrics;
   practiceRecommendations: PracticeRecommendation[];
   assistanceNote?: string;
+  coachingLine?: string;
 }
 
 export type AnalysisUsage = {

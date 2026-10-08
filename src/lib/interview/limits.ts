@@ -5,6 +5,8 @@ export const MAX_JOB_DESCRIPTION_CHARS = 8_000;
 export const MAX_JOB_LISTING_CHARS = 20_000;
 export const MIN_JOB_LISTING_CHARS = 40;
 export const MAX_RESUME_TEXT_CHARS = 12_000;
+/** Supporting resume and job text carried into a live session. The blueprint stays the working set. */
+export const LIVE_CONTEXT_CHARS = 2_500;
 export const MIN_JOB_DESCRIPTION_CHARS = 20;
 export const MIN_RESUME_TEXT_CHARS = 40;
 

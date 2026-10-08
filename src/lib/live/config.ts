@@ -39,17 +39,19 @@ export function planModel(): string {
 export const planReasoning = { effort: "none" as const };
 export const planRequestTimeoutMs = 20_000;
 
+/** Written review. Also the default for help, Story Builder, and job-listing extraction. */
 export function analysisModel(): string {
   return process.env.OPENAI_ANALYSIS_MODEL?.trim() || DEFAULT_ANALYSIS_MODEL;
 }
 
+/** In-interview help. Override with OPENAI_COACHING_MODEL. Otherwise uses the analysis model. */
 export function coachingModel(): string {
-  return process.env.OPENAI_COACHING_MODEL?.trim() || planModel();
+  return process.env.OPENAI_COACHING_MODEL?.trim() || analysisModel();
 }
 
-/** Story Builder reasoning. Defaults to the plan model and stays overrideable. */
+/** Story Builder. Override with OPENAI_STORY_MODEL. Otherwise uses the analysis model. */
 export function storyModel(): string {
-  return process.env.OPENAI_STORY_MODEL?.trim() || planModel();
+  return process.env.OPENAI_STORY_MODEL?.trim() || analysisModel();
 }
 
 const DEFAULT_PROFILE_TTL_DAYS = 45;

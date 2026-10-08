@@ -50,7 +50,7 @@ function adminUnavailable(error: unknown): boolean {
 }
 
 export function unauthorizedResponse(): Response {
-  return Response.json({ error: "Sign in to continue." }, { status: 401 });
+  return Response.json({ error: "Sign in to continue.", code: "AUTH_REQUIRED" }, { status: 401 });
 }
 
 export function unavailableAccountResponse(): Response {

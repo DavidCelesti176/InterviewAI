@@ -4,7 +4,7 @@ import type { HelpKind, InterviewHelpResponse } from "@/lib/interview/help-types
 import { clipText } from "@/lib/interview/limits";
 import type { StoredInterview } from "@/lib/interview/store";
 import type { InterviewTurn } from "@/lib/interview/types";
-import { coachingModel } from "@/lib/live/config";
+import { coachingModel, planReasoning } from "@/lib/live/config";
 
 const stepSchema = {
   type: "object",
@@ -87,7 +87,7 @@ export async function coachQuestion(input: {
   const model = coachingModel();
   const response = await client.responses.create({
     model,
-    reasoning: { effort: "low" },
+    reasoning: planReasoning,
     instructions: coachingInstructions(input.interview),
     input: coachingInput(input),
     text: {

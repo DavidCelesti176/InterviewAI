@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+import { planCoverage, privateInterviewFlow } from "@/lib/interview/competencies";
 import { buildDifficultyCurve, overallDifficulty } from "@/lib/interview/difficulty";
 import { buildExperienceCalibration, screenTheme } from "@/lib/interview/experience-calibration";
 import { candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
@@ -97,6 +98,13 @@ function authoredPacing(level: RoleAnalysis["candidateLevel"], minutes: number, 
   return `Question complexity follows opening ${curve.opening}, early ${curve.early}, middle ${curve.middle}, late ${curve.late}. Let it breathe: easier, medium, one follow-up when needed, then a lighter transition. ${levelNote} Do not invite their questions before about ${notBefore} minutes.`;
 }
 
+function philosophyNote(profile: CompanyInterviewProfile, notes: string[]): string[] {
+  const base = notes.length > 0 ? notes : ["Ask what they personally did, or what changed, only when that part of the answer is missing."];
+  const philosophy = profile.confidence === "low" ? "" : profile.interviewPhilosophy.trim();
+  if (!philosophy) return base.slice(0, 3);
+  return [`Company preparation says: ${philosophy}. This does not raise the follow-up cap or the experience ceiling.`, ...base].slice(0, 3);
+}
+
 function companyStyle(profile: CompanyInterviewProfile): InterviewBlueprint["companyStyle"] {
   if (profile.confidence === "low") {
     return {
@@ -108,7 +116,9 @@ function companyStyle(profile: CompanyInterviewProfile): InterviewBlueprint["com
     };
   }
   return {
-    summary: profile.summary,
+    summary: profile.answerStructure === "star"
+      ? `${profile.summary} When a question asks for a past example, a specific situation and a result are useful. Do not turn that into a script, and do not apply it to motivation or hypothetical questions.`
+      : profile.summary,
     confidence: profile.confidence,
     behavioralEmphasis: profile.behavioralEmphasis,
     technicalEmphasis: profile.technicalEmphasis,
@@ -129,7 +139,7 @@ export async function buildInterviewBlueprint(
     model: planModel(),
     reasoning: planReasoning,
     instructions:
-      "Build private guidance for a live interviewer. Do not write a numbered script. Priority order: job description, candidate experience ceiling, interview type, resume, then company style. Company style never raises the authority you may assume. A hard question tests thinking about work the candidate could have done, not a more senior job. Question-mix numbers are rough percentages. Follow-up notes are angles to use only when an answer is vague, incomplete, or important. Do not write notes that say to probe every answer. Pacing should vary difficulty and leave time to move on. Return at most 5 competencies, 5 resume topics, 5 role topics, 3 follow-up notes, and 4 behaviors to avoid.",
+      "Build private guidance for a live interviewer. Do not write a numbered script and do not announce interview phases. Priority order: job description, candidate experience ceiling, interview type, resume, then company style. Company style never raises the authority you may assume and never requires a follow-up on every answer. A hard question tests thinking about work the candidate could have done, not a more senior job. For a 30-minute interview, mark 4 or 5 competencies high. Those are the intended coverage. Mark other useful competencies medium. Medium items are backups, not a list you must finish. For a 10-minute interview, mark about 3 competencies high and do not add a medium list that must be asked. Question-mix numbers are rough percentages. Follow-up notes are angles to use only when an answer is vague, incomplete, or important. Pacing should vary difficulty and leave time to move on. Return at most 7 competencies, 5 resume topics, 5 role topics, 3 follow-up notes, and 4 behaviors to avoid.",
     input: `Interview type: ${config.interviewType}. ${typeNotes[config.interviewType]}
 ${calibration.ceilingSummary}
 ${calibration.avoidUnsupportedAuthorityAssumptions ? "Behavioral themes must stay inside that ceiling. Use internships, class projects, part-time work, campus roles, or a small business at its real scale. Do not plan questions about persuading executives, managing employees, or owning enterprise strategy." : "Leadership and strategy questions are appropriate when they match the scope above."}
@@ -222,7 +232,7 @@ Do not copy those sentences into openingStrategy. The opening stays a natural qu
     interviewerTone: parsed.interviewerTone,
     openingStrategy,
     questionMix: parsed.questionMix,
-    competencyPriorities: parsed.competencyPriorities.slice(0, 5),
+    competencyPriorities: parsed.competencyPriorities.slice(0, 7),
     resumeTopicsToProbe: parsed.resumeTopicsToProbe
       .filter((item) => {
         const screened = screenTheme(`${item.topic} ${item.reason}`, calibration);
@@ -232,14 +242,13 @@ Do not copy those sentences into openingStrategy. The opening stays a natural qu
       .slice(0, 5),
     roleTopicsToProbe: roleTopics,
     companyStyle: companyStyle(profile),
-    followUpGuidance:
-      followUpGuidance.length > 0
-        ? followUpGuidance
-        : ["Ask what they personally did, or what changed, only when that part of the answer is missing."],
+    followUpGuidance: philosophyNote(profile, followUpGuidance),
     behaviorsToAvoid: [...avoid].slice(0, 10),
     pacingGuidance: authoredPacing(role.candidateLevel, config.targetDurationMinutes, curve),
     closingStrategy: `${parsed.closingStrategy} Do not invite their questions before about ${candidateQuestionsNotBeforeMinutes(config.targetDurationMinutes)} minutes. Once you do, answer their questions and do not return to an earlier topic.`,
     experienceCalibration: { ...calibration, screenedThemes },
+    coverage: planCoverage(parsed.competencyPriorities.slice(0, 7), config.targetDurationMinutes),
+    privateFlow: privateInterviewFlow(config.targetDurationMinutes),
   };
 }
 

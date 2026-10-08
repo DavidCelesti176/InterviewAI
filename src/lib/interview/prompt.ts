@@ -1,5 +1,6 @@
 import { calibrationInstructions } from "@/lib/interview/experience-calibration";
 import { candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
+import { clipText, LIVE_CONTEXT_CHARS } from "@/lib/interview/limits";
 import type { InterviewBlueprint, InterviewConfig, InterviewType } from "@/lib/interview/types";
 
 const typeGuidance: Record<InterviewType, string> = {
@@ -25,7 +26,29 @@ Use one accessible opening question.
 Through the middle, ask ${mains} substantial questions. Let difficulty breathe: easier, medium, at most one follow-up, then a lighter transition before anything harder. Do not stack hard questions or hard follow-ups.
 Around ${notBefore} minutes, finish the current thread instead of opening another deep one. Then invite their questions.
 Once you invite their questions, stay there. Answer what they ask. Do not reopen an earlier topic.
-Cover the high-priority competencies before you close. You do not need every competency, and you do not close after only a few minutes when time remains.`;
+Cover the intended high-priority competencies before you close. Medium competencies are optional backups, not a list you must finish. You do not need every competency, and you do not close after only a few minutes when time remains.
+Do not say the phase names aloud.`;
+}
+
+function modeLine(mode: InterviewConfig["interviewMode"]): string {
+  if (mode === "practice") {
+    return "This is Practice Mode. You still interview. If they cannot find an example, you may once say: Think of one specific situation from work, school, athletics, a project, or your business. Do not supply the story, the result, or what they should say.";
+  }
+  return "This is a mock interview. Allow a thinking pause. You may repeat or rephrase the question once. Do not coach them into the answer. If they still cannot answer, acknowledge that and move on.";
+}
+
+function coverageLines(blueprint: InterviewBlueprint): string {
+  const coverage = blueprint.coverage ?? [];
+  if (coverage.length === 0) {
+    return blueprint.competencyPriorities.map((item) => `- ${item.competency} (${item.priority}): ${item.reason}`).join("\n");
+  }
+  const line = (item: InterviewBlueprint["coverage"][number]) => `- ${item.label} (${item.priority}, ${item.framework}): ${item.evidence}`;
+  const intended = coverage.filter((item) => item.role === "intended");
+  const backup = coverage.filter((item) => item.role === "backup");
+  return `Intended coverage:
+${intended.map(line).join("\n") || "- None yet"}
+Optional backups if time remains. Do not treat these as required:
+${backup.map(line).join("\n") || "- None"}`;
 }
 
 function lines(items: string[]): string {
@@ -67,9 +90,7 @@ export function buildInterviewerInstructions(
   interviewerName = "Claire",
   storyContext = "",
 ): string {
-  const competencies = blueprint.competencyPriorities
-    .map((item) => `- ${item.competency} (${item.priority}): ${item.reason}`)
-    .join("\n");
+  const competencies = coverageLines(blueprint);
   const resumeTopics = blueprint.resumeTopicsToProbe
     .map((item) => `- ${item.topic}: ${item.reason}`)
     .join("\n");
@@ -122,7 +143,7 @@ Interview conduct:
 - Remember what has already been discussed.
 - Candidate level changes how sophisticated the question should be. It does not mean more follow-ups or a sharper tone.
 - Ask one question at a time.
-- ${config.interviewMode === "practice" ? "This is Practice Mode. You still interview. You do not coach, even if the candidate pauses." : "This is a mock interview. Do not coach."}
+- ${modeLine(config.interviewMode)}
 - If you are told the interview is paused, stop speaking and wait. When you are told the candidate is ready, continue. Do not mention a pause, help, or coaching.
 - ${typeGuidance[config.interviewType]}
 - ${pacing(config.targetDurationMinutes)}
@@ -140,6 +161,20 @@ ${companyBlock(blueprint)}
 Competencies worth exploring:
 ${competencies}
 
+${blueprint.privateFlow ? `${blueprint.privateFlow}\n` : ""}Answer shape, kept private. Do not name these labels to the candidate, and do not force every answer into a past-experience story.
+- A question about a past experience, such as "tell me about a time", needs a specific situation, what they were responsible for, what they personally did, and what happened. Ask what they learned only for a failure, mistake, conflict, or judgment question. A failure does not need a happy ending.
+- "Why this company", "why this role", or "why this program" is motivation. Ask for one specific reason. "Great opportunity", "good company", and "lots of growth" are thin. Do not turn that answer into a past-experience story.
+- "How would you" or "what would you do" is reasoning about a hypothetical. Do not demand a past story.
+- A direct question, such as what interests them, can be answered directly.
+When a past-experience answer is missing evidence, use one of these, then stop:
+- No specific example: "Can you give me one specific example?"
+- You cannot tell what they personally did: "What did you personally do?"
+- The outcome is missing, and this is not a failure they have already learned from: "What happened as a result?"
+- A failure, conflict, or judgment answer has no takeaway: "What did you take away from that experience?"
+Do not follow up only because another question is possible. Most answers get zero or one follow-up. A second only when that competency is high priority and the first follow-up is still vague. More than two on one topic should be rare.
+An opening answer of about 45 to 90 seconds is enough. A few seconds outside that is not a problem. If they recite the resume job by job, ask once what they want you to remember, then move on.
+Do not invent facts, metrics, or a story for them. Prefer a different example when they have already used one story for another competency. Using one story for two competencies is fine. Do not spend most of the interview on the same story.
+
 Role topics you may reach later:
 ${lines(blueprint.roleTopicsToProbe)}
 
@@ -152,10 +187,10 @@ ${lines(blueprint.followUpGuidance)}
 Close this way when the interview is winding down:
 ${blueprint.closingStrategy}
 
-Job description, for context:
-${config.jobDescription}
+Job description, supporting context. The competencies and topics above are what to explore:
+${clipText(config.jobDescription, LIVE_CONTEXT_CHARS)}
 
-Candidate resume, for context only. Do not recite it:
-${config.candidate.resumeText}
+Candidate resume, supporting context only. Do not recite it:
+${clipText(config.candidate.resumeText, LIVE_CONTEXT_CHARS)}
 ${storyContext ? `\n${storyContext}` : ""}`;
 }
