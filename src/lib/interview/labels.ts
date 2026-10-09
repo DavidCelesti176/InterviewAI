@@ -36,10 +36,8 @@ export const durationOptions: Array<{
   minutes: number;
   recommended?: boolean;
 }> = [
-  { value: "15", label: "15 minutes", detail: "Quick practice", minutes: 15 },
-  { value: "30", label: "30 minutes", detail: "Standard interview", minutes: 30, recommended: true },
-  { value: "45", label: "45 minutes", detail: "Deep practice", minutes: 45 },
-  { value: "unsure", label: "I'm not sure", detail: "We'll aim for about 30 minutes", minutes: 30 },
+  { value: "10", label: "10 minutes", detail: "Quick Practice", minutes: 10 },
+  { value: "30", label: "30 minutes", detail: "Full mock interview", minutes: 30, recommended: true },
 ];
 
 export function interviewModeLabel(mode: InterviewMode | undefined): string {

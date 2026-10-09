@@ -8,10 +8,14 @@ import type { ProfessionalStory } from "@/lib/story/types";
 import type { InterviewAnalysis } from "@/lib/interview/analysis-types";
 import type { SavedInterviewResult } from "@/lib/interview/browser-state";
 import type { InterviewAssistanceEvent, InterviewPauseEvent } from "@/lib/interview/help-types";
+import { analysisTierFor, sessionClassForMinutes, voicePracticeLength } from "@/lib/billing/decide";
+import { createInterviewGrant } from "@/lib/billing/store";
 import { canReplayStatus, clonedInterview, replayQuestionLines } from "@/lib/interview/replay";
 import type { StoredInterview } from "@/lib/interview/store";
 import type { DurationChoice, InterviewTurn } from "@/lib/interview/types";
 import { getAdminApp } from "@/lib/firebase/admin";
+
+export const interviewChildCollections = ["turns", "analysis", "assistance"] as const;
 
 async function database(): Promise<Firestore> {
   const { getFirestore } = await import("firebase-admin/firestore");
@@ -282,6 +286,31 @@ export async function replaySavedInterview(
     emphasisLabel: text(data.emphasisLabel, 80),
     interviewerProfileId: text(data.interviewerProfileId, 40) || "claire",
   });
+  if (next.practice) {
+    const length = voicePracticeLength("weak_answer");
+    await createInterviewGrant({
+      uid,
+      interviewId: id,
+      sessionClass: "voice_practice",
+      practiceKind: "weak_answer",
+      targetMinutes: length.targetMinutes,
+      maxMinutes: length.maxMinutes,
+      analysisTier: "basic",
+    });
+  } else {
+    const sessionClass = sessionClassForMinutes(next.config.targetDurationMinutes);
+    if (sessionClass) {
+      await createInterviewGrant({
+        uid,
+        interviewId: id,
+        sessionClass,
+        practiceKind: null,
+        targetMinutes: next.config.targetDurationMinutes,
+        maxMinutes: next.config.targetDurationMinutes,
+        analysisTier: analysisTierFor(sessionClass),
+      });
+    }
+  }
   const saved = await readInterviewResult(uid, id);
   if (!saved) return null;
   return { setup: saved.setup, practiceQuestions: replayQuestionLines(next) };
@@ -308,7 +337,7 @@ function setupFrom(interviewId: string, data: DocumentData): SavedInterviewResul
     interviewMode: data.interviewMode === "practice" ? "practice" : "mock",
     targetDurationMinutes: num(data.targetDurationMinutes) ?? 30,
     durationChoice:
-      durationChoice === "15" || durationChoice === "30" || durationChoice === "45" || durationChoice === "unsure"
+      durationChoice === "10" || durationChoice === "15" || durationChoice === "30" || durationChoice === "45" || durationChoice === "unsure"
         ? durationChoice
         : "30",
     resumeFileName: text(data.resumeFileName, 180),
@@ -480,9 +509,9 @@ export async function deleteInterview(uid: string, interviewId: string): Promise
   const ref = await interviewRef(uid, interviewId);
   const snap = await ref.get();
   if (!snap.exists) return false;
-  await deleteDocs(ref.collection("turns"));
-  await deleteDocs(ref.collection("analysis"));
-  await deleteDocs(ref.collection("assistance"));
+  for (const name of interviewChildCollections) {
+    await deleteDocs(ref.collection(name));
+  }
   await ref.delete();
   return true;
 }

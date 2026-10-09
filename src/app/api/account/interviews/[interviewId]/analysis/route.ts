@@ -1,6 +1,10 @@
+import { BILLING_LAUNCH_AT } from "@/lib/billing/products";
+import { projectAnalysis } from "@/lib/billing/project-analysis";
+import { readSessionForInterview } from "@/lib/billing/store";
 import type { InterviewAnalysis } from "@/lib/interview/analysis-types";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { saveInterviewAnalysis } from "@/lib/firebase/data";
+import { getInterview } from "@/lib/interview/store";
 
 export const runtime = "nodejs";
 
@@ -22,7 +26,10 @@ export async function POST(request: Request, context: { params: Promise<{ interv
   }
   const analysis = body && typeof body === "object" ? (body as { analysis?: unknown }).analysis : null;
   if (!isAnalysis(analysis)) return Response.json({ error: "The review could not be saved." }, { status: 400 });
-  const saved = await saveInterviewAnalysis(user.uid, interviewId, analysis);
+  const grant = await readSessionForInterview(user.uid, interviewId);
+  const interview = grant ? null : await getInterview(user.uid, interviewId);
+  const tier = grant?.analysisTier ?? ((interview?.createdAt ?? BILLING_LAUNCH_AT) < BILLING_LAUNCH_AT ? "full" : "basic");
+  const saved = await saveInterviewAnalysis(user.uid, interviewId, projectAnalysis(analysis, tier));
   if (!saved) return Response.json({ error: "This interview could not be found." }, { status: 404 });
   return Response.json({ ok: true });
 }

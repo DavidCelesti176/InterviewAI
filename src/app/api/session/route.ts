@@ -1,13 +1,18 @@
 import OpenAI from "openai";
 
+import { abortLive, commitLive, lockReservation } from "@/lib/billing/store";
+import { entitlementResponse } from "@/lib/billing/http";
+import { billingBypassEnabled, liveCreateShouldFail } from "@/lib/billing/enforcement";
+import { safetyCeilingMinutes } from "@/lib/billing/products";
+import type { SessionGrant } from "@/lib/billing/types";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
-import { markInterviewStarted } from "@/lib/firebase/data";
+import { markInterviewStarted, readProfessionalStory } from "@/lib/firebase/data";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { buildPracticeInstructions } from "@/lib/interview/practice-prompt";
 import { buildInterviewerInstructions } from "@/lib/interview/prompt";
 import { getInterview } from "@/lib/interview/store";
+import type { InterviewConfig } from "@/lib/interview/types";
 import { interviewerName, liveSessionSettings } from "@/lib/live/config";
-import { readProfessionalStory } from "@/lib/firebase/data";
 import { buildStoryPracticeInstructions } from "@/lib/story/practice-prompt";
 
 export const runtime = "nodejs";
@@ -42,6 +47,8 @@ export async function POST(request: Request) {
   let interviewId = "";
   let interviewerId = "";
   let storyPractice = false;
+  let sessionId = "";
+  let reservationId = "";
   try {
     const body: unknown = JSON.parse(raw);
     if (body && typeof body === "object" && "sdp" in body && typeof body.sdp === "string") {
@@ -56,6 +63,12 @@ export async function POST(request: Request) {
     if (body && typeof body === "object" && "storyPractice" in body && body.storyPractice === true) {
       storyPractice = true;
     }
+    if (body && typeof body === "object" && "sessionId" in body && typeof body.sessionId === "string") {
+      sessionId = body.sessionId.trim();
+    }
+    if (body && typeof body === "object" && "reservationId" in body && typeof body.reservationId === "string") {
+      reservationId = body.reservationId.trim();
+    }
   } catch {
     return jsonError("An SDP offer is required", 400);
   }
@@ -67,15 +80,26 @@ export async function POST(request: Request) {
     sdp += "\r\n";
   }
 
+  const bypass = billingBypassEnabled();
+  let grant: SessionGrant | null = null;
+  if (!bypass) {
+    if (!sessionId || !reservationId) return entitlementResponse("PAYMENT_REQUIRED");
+    grant = await lockReservation(user.uid, reservationId, sessionId);
+    if (!grant) return entitlementResponse("CREDIT_RESERVED");
+    storyPractice = grant.practiceKind === "story";
+    interviewId = grant.interviewId ?? "";
+  }
   if (!storyPractice && !interviewId) {
     return jsonError("Create an interview before starting.", 400);
   }
   const interview = storyPractice ? null : await getInterview(user.uid, interviewId);
   if (!storyPractice && !interview) {
+    if (grant) await abortLive(user.uid, reservationId);
     return jsonError("This interview could not be found.", 404);
   }
 
   if (!process.env.OPENAI_API_KEY) {
+    if (grant) await abortLive(user.uid, reservationId);
     return jsonError("Set OPENAI_API_KEY on the server", 503);
   }
 
@@ -85,16 +109,23 @@ export async function POST(request: Request) {
   let instructions = "";
   if (storyPractice) {
     const story = await readProfessionalStory(user.uid);
-    if (!story) return jsonError("Build your story before practicing it.", 400);
-    instructions = buildStoryPracticeInstructions(story, name);
-  } else if (interview?.practice) {
-    instructions = buildPracticeInstructions(interview.config, interview.blueprint, interview.practice, name);
+    if (!story) {
+      if (grant) await abortLive(user.uid, reservationId);
+      return jsonError("Build your story before practicing it.", 400);
+    }
+    instructions = `${buildStoryPracticeInstructions(story, name)}\n${capLine(grant)}`;
+  } else if (grant?.sessionClass === "voice_practice" && interview?.practice) {
+    instructions = `${buildPracticeInstructions(pacedConfig(interview.config, grant), interview.blueprint, interview.practice, name)}\n${capLine(grant)}`;
   } else if (interview) {
-    instructions = buildInterviewerInstructions(interview.config, interview.blueprint, name, interview.storyContext ?? "");
+    instructions = `${buildInterviewerInstructions(pacedConfig(interview.config, grant), interview.blueprint, name, interview.storyContext ?? "")}\n${capLine(grant)}`;
   }
-  if (!instructions) return jsonError("This interview could not be found.", 404);
+  if (!instructions) {
+    if (grant) await abortLive(user.uid, reservationId);
+    return jsonError("This interview could not be found.", 404);
+  }
 
   try {
+    if (liveCreateShouldFail()) throw new Error("dev-live-create-fail");
     const result = await client.live.create({
       session: {
         model,
@@ -114,6 +145,13 @@ export async function POST(request: Request) {
       },
     });
 
+    if (grant) {
+      const committed = await commitLive(user.uid, reservationId, result.session.id);
+      if (!committed) {
+        await abortLive(user.uid, reservationId);
+        return entitlementResponse("CREDIT_RESERVED");
+      }
+    }
     if (!storyPractice) {
       try {
         await markInterviewStarted(user.uid, interviewId, interviewerId);
@@ -130,6 +168,7 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
+    if (grant) await abortLive(user.uid, reservationId);
     if (error instanceof OpenAI.APIError) {
       console.error(
         "Live session creation failed",
@@ -149,4 +188,15 @@ export async function POST(request: Request) {
     console.error("Live session creation failed");
     return jsonError("Live session creation failed", 502);
   }
+}
+
+function pacedConfig(config: InterviewConfig, grant: SessionGrant | null): InterviewConfig {
+  if (!grant) return config;
+  return { ...config, targetDurationMinutes: grant.targetMinutes };
+}
+
+function capLine(grant: SessionGrant | null): string {
+  if (!grant) return "";
+  const ceiling = safetyCeilingMinutes(grant);
+  return `Aim for about ${grant.targetMinutes} minutes and wrap up naturally. Do not keep the conversation going past ${ceiling} minutes.`;
 }

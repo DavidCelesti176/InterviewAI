@@ -14,7 +14,7 @@ import type { DurationChoice, InterviewConfig, InterviewType } from "@/lib/inter
 import { extractPdfText, looksLikePdf } from "@/lib/resume/parse-pdf";
 
 const interviewTypes = new Set<InterviewType>(["mixed", "hiring-manager", "behavioral", "recruiter", "role-specific"]);
-const durationChoices = new Set<DurationChoice>(["15", "30", "45", "unsure"]);
+const durationChoices = new Set<DurationChoice>(["10", "30"]);
 
 export type Submission =
   | {

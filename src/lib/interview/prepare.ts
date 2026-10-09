@@ -1,3 +1,5 @@
+import { analysisTierFor, sessionClassForMinutes } from "@/lib/billing/decide";
+import { createInterviewGrant } from "@/lib/billing/store";
 import { analyzeRole, isRoleAnalysis } from "@/lib/interview/analyze-role";
 import { buildInterviewBlueprint, curveFor } from "@/lib/interview/build-blueprint";
 import { levelLabel } from "@/lib/interview/difficulty";
@@ -49,6 +51,8 @@ export async function finishPreparedInterview(input: {
   const blueprint = await buildInterviewBlueprint(input.config, input.roleAnalysis, input.company.profile, storyContext);
 
   const id = input.interviewId?.trim() || crypto.randomUUID();
+  const sessionClass = sessionClassForMinutes(input.config.targetDurationMinutes);
+  if (!sessionClass) throw new Error("Choose a 10-minute Quick Practice or a 30-minute full mock.");
   await saveInterview(
     input.uid,
     {
@@ -73,6 +77,15 @@ export async function finishPreparedInterview(input: {
       emphasisLabel: emphasisLabel(input.company.profile, input.config.interviewType),
     },
   );
+  await createInterviewGrant({
+    uid: input.uid,
+    interviewId: id,
+    sessionClass,
+    practiceKind: null,
+    targetMinutes: input.config.targetDurationMinutes,
+    maxMinutes: input.config.targetDurationMinutes,
+    analysisTier: analysisTierFor(sessionClass),
+  });
 
   return {
     summary: {
@@ -127,6 +140,8 @@ export async function prepareInterview(input: {
   input.onStep("building_plan", "done");
 
   const id = crypto.randomUUID();
+  const sessionClass = sessionClassForMinutes(input.config.targetDurationMinutes);
+  if (!sessionClass) throw new Error("Choose a 10-minute Quick Practice or a 30-minute full mock.");
   await saveInterview(
     input.uid,
     {
@@ -150,6 +165,15 @@ export async function prepareInterview(input: {
       emphasisLabel: emphasisLabel(company.profile, input.config.interviewType),
     },
   );
+  await createInterviewGrant({
+    uid: input.uid,
+    interviewId: id,
+    sessionClass,
+    practiceKind: null,
+    targetMinutes: input.config.targetDurationMinutes,
+    maxMinutes: input.config.targetDurationMinutes,
+    analysisTier: analysisTierFor(sessionClass),
+  });
 
   return {
     summary: {

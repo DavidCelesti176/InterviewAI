@@ -1,11 +1,17 @@
 import OpenAI from "openai";
 
+import { BILLING_LAUNCH_AT } from "@/lib/billing/products";
+import { projectAnalysis } from "@/lib/billing/project-analysis";
+import { readSessionForInterview } from "@/lib/billing/store";
+import type { AnalysisTier } from "@/lib/billing/types";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { saveInterviewAnalysis } from "@/lib/firebase/data";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { analyzeInterview, type AnalysisStep } from "@/lib/interview/analyze-interview";
 import type { AssistanceType, InterviewAssistanceEvent } from "@/lib/interview/help-types";
 import { getInterview } from "@/lib/interview/store";
+import { listInterviewStories } from "@/lib/interview/story-store";
+import { storiesForAnalysis } from "@/lib/interview/stories";
 import type { InterviewTurn } from "@/lib/interview/types";
 
 export const runtime = "nodejs";
@@ -93,12 +99,17 @@ export async function POST(request: Request) {
       const onStep = (step: AnalysisStep, state: "active" | "done") => send({ step, state });
       try {
         const pausedMs = typeof payload.pausedMs === "number" && Number.isFinite(payload.pausedMs) ? payload.pausedMs : 0;
+        const grant = await readSessionForInterview(user.uid, interviewId);
+        const tier: AnalysisTier = grant?.analysisTier ?? (interview.createdAt < BILLING_LAUNCH_AT ? "full" : "basic");
+        const confirmedStories = await confirmedStoryText(user.uid);
         const result = await analyzeInterview({
           interview,
           turns,
           elapsedMs,
           assistance: readAssistance(payload.assistance),
           pausedMs,
+          tier,
+          confirmedStories,
           onStep,
         });
         let saved = false;
@@ -111,7 +122,7 @@ export async function POST(request: Request) {
         }
         send({
           step: "ready",
-          analysis: result.analysis,
+          analysis: projectAnalysis(result.analysis, tier),
           saved,
           debug: process.env.NODE_ENV === "development" ? result.debug : undefined,
         });
@@ -135,4 +146,13 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
   });
+}
+
+async function confirmedStoryText(uid: string): Promise<string> {
+  try {
+    return storiesForAnalysis(await listInterviewStories(uid));
+  } catch (error) {
+    console.error("Interview stories were not included", error instanceof Error ? error.message : "error");
+    return "";
+  }
 }

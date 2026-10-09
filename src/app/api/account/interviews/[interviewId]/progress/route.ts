@@ -1,3 +1,4 @@
+import { closeLiveUsage, markCandidateSpoke } from "@/lib/billing/store";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { saveInterviewProgress } from "@/lib/firebase/data";
 import type { InterviewStatusName } from "@/lib/account/types";
@@ -74,13 +75,19 @@ export async function POST(request: Request, context: { params: Promise<{ interv
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const status = typeof record.status === "string" && statuses.has(record.status as InterviewStatusName) ? (record.status as InterviewStatusName) : "in_progress";
   const elapsedMs = typeof record.elapsedMs === "number" && Number.isFinite(record.elapsedMs) ? record.elapsedMs : 0;
+  const turns = readTurns(record.turns);
   const saved = await saveInterviewProgress(user.uid, interviewId, {
     status,
-    turns: readTurns(record.turns),
+    turns,
     elapsedMs,
     assistance: readAssistance(record.assistance),
     pauses: readPauses(record.pauses),
   });
   if (!saved) return Response.json({ error: "This interview could not be found." }, { status: 404 });
+  if (turns.some((turn) => turn.speaker === "candidate")) await markCandidateSpoke(user.uid, interviewId);
+  if (status === "complete" || status === "failed" || status === "analyzing") {
+    const reported = typeof record.usageSeconds === "number" && Number.isFinite(record.usageSeconds) ? record.usageSeconds : null;
+    await closeLiveUsage(user.uid, interviewId, Date.now(), reported);
+  }
   return Response.json({ ok: true });
 }

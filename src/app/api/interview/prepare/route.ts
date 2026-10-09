@@ -1,5 +1,9 @@
 import OpenAI from "openai";
 
+import { entitlementResponse } from "@/lib/billing/http";
+import { launchMinutes } from "@/lib/billing/products";
+import { previewAccess } from "@/lib/billing/store";
+import { billingBypassEnabled } from "@/lib/billing/enforcement";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { createPreparingInterview, getResume, isRecordId, saveResumeFile, touchResume } from "@/lib/firebase/data";
 import { isSameOrigin } from "@/lib/http/same-origin";
@@ -14,6 +18,13 @@ export const maxDuration = 30;
 
 function jsonError(error: string, status: number) {
   return Response.json({ error }, { status });
+}
+
+async function blockPreparation(uid: string, minutes: number): Promise<Response | null> {
+  if (!launchMinutes(minutes)) return entitlementResponse("DURATION_NOT_INCLUDED");
+  if (billingBypassEnabled()) return null;
+  const code = await previewAccess(uid, minutes);
+  return code ? entitlementResponse(code) : null;
 }
 
 function isProfile(value: unknown): value is CompanyInterviewProfile {
@@ -97,6 +108,8 @@ export async function POST(request: Request) {
     if (stage === "role") {
       const config = readStoredConfig(body.config);
       if (!config) return jsonError("The interview details could not be read. Try again.", 400);
+      const blocked = await blockPreparation(user.uid, config.targetDurationMinutes);
+      if (blocked) return blocked;
       const roleAnalysis = await analyzeRole(config);
       return Response.json({ roleAnalysis });
     }
@@ -105,6 +118,9 @@ export async function POST(request: Request) {
       const company = typeof body.company === "string" ? body.company.trim() : "";
       const jobTitle = typeof body.jobTitle === "string" ? body.jobTitle.trim() : "";
       if (!company || !jobTitle) return jsonError("Enter a company and job title.", 400);
+      const minutes = typeof body.targetMinutes === "number" ? body.targetMinutes : Number.NaN;
+      const blocked = await blockPreparation(user.uid, minutes);
+      if (blocked) return blocked;
       const researched = await researchCompany(company, jobTitle);
       return Response.json(researched);
     }
@@ -117,6 +133,8 @@ export async function POST(request: Request) {
       if (!config || !roleAnalysis || !resumeFileName || !durationChoice) {
         return jsonError("The interview plan could not be created. Try again.", 400);
       }
+      const blocked = await blockPreparation(user.uid, config.targetDurationMinutes);
+      if (blocked) return blocked;
       const companyBody = body.company;
       const profile =
         companyBody && typeof companyBody === "object" && isProfile((companyBody as { profile?: unknown }).profile)

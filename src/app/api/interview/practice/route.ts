@@ -1,3 +1,5 @@
+import { voicePracticeLength } from "@/lib/billing/decide";
+import { createInterviewGrant } from "@/lib/billing/store";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { isSameOrigin } from "@/lib/http/same-origin";
 import { clipText } from "@/lib/interview/limits";
@@ -80,6 +82,16 @@ export async function POST(request: Request) {
     },
     { status: "ready" },
   );
+  const length = voicePracticeLength("weak_answer");
+  await createInterviewGrant({
+    uid: user.uid,
+    interviewId: id,
+    sessionClass: "voice_practice",
+    practiceKind: "weak_answer",
+    targetMinutes: length.targetMinutes,
+    maxMinutes: length.maxMinutes,
+    analysisTier: "basic",
+  });
 
   return Response.json({ practiceId: id, questionCount: questions.length });
 }

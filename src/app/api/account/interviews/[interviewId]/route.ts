@@ -1,5 +1,9 @@
+import { BILLING_LAUNCH_AT } from "@/lib/billing/products";
+import { projectAnalysis } from "@/lib/billing/project-analysis";
+import { readSessionForInterview } from "@/lib/billing/store";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { deleteInterview, isRecordId, readInterviewResult, setInterviewer } from "@/lib/firebase/data";
+import { getInterview } from "@/lib/interview/store";
 
 export const runtime = "nodejs";
 
@@ -10,6 +14,12 @@ export async function GET(request: Request, context: { params: Promise<{ intervi
   if (!isRecordId(interviewId)) return Response.json({ error: "This interview could not be found." }, { status: 404 });
   const result = await readInterviewResult(user.uid, interviewId);
   if (!result) return Response.json({ error: "This interview could not be found." }, { status: 404 });
+  if (result.analysis) {
+    const grant = await readSessionForInterview(user.uid, interviewId);
+    const interview = grant ? null : await getInterview(user.uid, interviewId);
+    const tier = grant?.analysisTier ?? ((interview?.createdAt ?? BILLING_LAUNCH_AT) < BILLING_LAUNCH_AT ? "full" : "basic");
+    result.analysis = projectAnalysis(result.analysis, tier);
+  }
   return Response.json({ result });
 }
 

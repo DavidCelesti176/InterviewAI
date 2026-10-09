@@ -1,3 +1,4 @@
+import { connectedLimitMs } from "@/lib/billing/products";
 import { currentIdToken } from "@/lib/firebase/client";
 import type { InterviewPauseEvent } from "@/lib/interview/help-types";
 import { buildContinueInstruction } from "@/lib/interview/interview-phase";
@@ -156,6 +157,10 @@ export class InterviewSession {
   private openTimestamp = 0;
   private lastCandidateSpeechAt: number | null = null;
   private targetDurationMinutes = 30;
+  private interviewMode: "practice" | "mock" = "mock";
+  private billingSessionId = "";
+  private ceilingMs = 0;
+  private ceilingTimer: ReturnType<typeof setTimeout> | null = null;
   private lastInterviewerSpeechAt: number | null = null;
   private continueTimer: ReturnType<typeof setTimeout> | null = null;
   private nudgedForTurn = false;
@@ -185,20 +190,62 @@ export class InterviewSession {
     };
   }
 
+  private async authorize(interviewId: string, story: boolean): Promise<{ bypass: boolean; sessionId: string; reservationId: string; targetMinutes: number; ceilingMinutes: number }> {
+    const token = await currentIdToken();
+    if (!token) throw new Error("Sign in to continue.");
+    const response = await fetch("/api/billing?action=authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-firebase-token": token },
+      body: JSON.stringify({ interviewId, story }),
+    });
+    const body: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : "This interview could not be started.";
+      throw new Error(message);
+    }
+    const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    return {
+      bypass: record.bypass === true,
+      sessionId: typeof record.sessionId === "string" ? record.sessionId : "",
+      reservationId: typeof record.reservationId === "string" ? record.reservationId : "",
+      targetMinutes: typeof record.targetMinutes === "number" ? record.targetMinutes : 0,
+      ceilingMinutes: typeof record.ceilingMinutes === "number" ? record.ceilingMinutes : 0,
+    };
+  }
+
+  private closeBilling(): void {
+    const sessionId = this.billingSessionId;
+    if (!sessionId) return;
+    void currentIdToken().then((token) => {
+      if (!token) return;
+      void fetch("/api/billing?action=close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-firebase-token": token },
+        body: JSON.stringify({ sessionId, reportedUsageSeconds: this.snapshot.usageSeconds }),
+      });
+    });
+  }
+
   async start(
     interviewId: string,
     interviewerId?: string,
     targetDurationMinutes = 30,
-    options?: { storyPractice?: boolean },
+    options?: { storyPractice?: boolean; interviewMode?: "practice" | "mock" },
   ): Promise<void> {
     if (!this.snapshot.canStart) return;
     this.generation += 1;
     const generation = this.generation;
     this.resetForStart();
     this.targetDurationMinutes = Number.isFinite(targetDurationMinutes) && targetDurationMinutes > 0 ? targetDurationMinutes : 30;
+    this.interviewMode = options?.interviewMode === "practice" ? "practice" : "mock";
     this.patch({ status: "Connecting", canStart: false, errorMessage: null, autoplayBlocked: false });
 
     try {
+      const access = await this.authorize(interviewId, options?.storyPractice === true);
+      if (generation !== this.generation) return;
+      if (!access.bypass && access.targetMinutes > 0) this.targetDurationMinutes = access.targetMinutes;
+      this.ceilingMs = access.ceilingMinutes > 0 ? connectedLimitMs(access.ceilingMinutes) : 0;
+      this.billingSessionId = access.sessionId;
       const AudioContextCtor = window.AudioContext;
       this.audioContext = new AudioContextCtor();
       await this.audioContext.resume();
@@ -261,6 +308,7 @@ export class InterviewSession {
           interviewId,
           interviewerId,
           ...(options?.storyPractice ? { storyPractice: true } : {}),
+          ...(access.sessionId ? { sessionId: access.sessionId, reservationId: access.reservationId } : {}),
         }),
       });
       if (generation !== this.generation) return;
@@ -386,6 +434,9 @@ export class InterviewSession {
     this.cleaned = false;
     this.greetingSent = false;
     this.startedAt = null;
+    if (this.ceilingTimer) clearTimeout(this.ceilingTimer);
+    this.ceilingTimer = null;
+    this.ceilingMs = 0;
     this.handledDelegations.clear();
     this.speakingUntil = 0;
     this.turns = [];
@@ -563,6 +614,7 @@ export class InterviewSession {
   private onStarted(): void {
     this.ready = true;
     this.startedAt = Date.now();
+    this.armCeiling();
     this.timer = setInterval(() => {
       const elapsed = this.activeElapsed();
       if (elapsed !== this.snapshot.elapsedMs) this.patch({ elapsedMs: elapsed });
@@ -681,6 +733,7 @@ export class InterviewSession {
       targetMinutes: this.targetDurationMinutes,
       turns: this.turns,
       pendingCandidateText: pending,
+      interviewMode: this.interviewMode,
     });
   }
 
@@ -742,6 +795,32 @@ export class InterviewSession {
     this.finish("Error", message);
   }
 
+  private armCeiling(): void {
+    if (this.ceilingTimer) clearTimeout(this.ceilingTimer);
+    this.ceilingTimer = null;
+    if (this.ceilingMs <= 0 || this.startedAt === null) return;
+    const connectedMs = Date.now() - this.startedAt;
+    this.ceilingTimer = setTimeout(() => this.hitCeiling(), Math.max(0, this.ceilingMs - connectedMs));
+  }
+
+  private hitCeiling(): void {
+    this.ceilingTimer = null;
+    if (this.cleaned || this.finalized) return;
+    this.record("safety ceiling", "Closing at the connected-time limit");
+    this.send({
+      type: "session.instructions.append",
+      event_id: this.commandId("ceiling"),
+      delegation_id: null,
+      content: "The time limit for this session has been reached. Thank the candidate in one short sentence and stop.",
+    });
+    if (this.events && this.events.readyState === "open" && this.snapshot.canEnd) {
+      this.end();
+      return;
+    }
+    this.finalized = true;
+    this.finish("Ended", null);
+  }
+
   private activeElapsed(): number {
     if (this.startedAt === null) return 0;
     const openPause = this.pausedAt === null ? 0 : Date.now() - this.pausedAt;
@@ -777,7 +856,10 @@ export class InterviewSession {
     this.continueTimer = null;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.ceilingTimer) clearTimeout(this.ceilingTimer);
+    this.ceilingTimer = null;
     this.releaseMedia();
+    if (this.billingSessionId) void this.closeBilling();
     this.patch({
       status,
       errorMessage: message,

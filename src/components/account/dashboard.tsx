@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { CheckoutStatus } from "@/components/billing/checkout-status";
+import { billingSentence } from "@/lib/billing/display";
 import { useAuth } from "@/contexts/auth-context";
 import { authorizedFetch } from "@/lib/account/client";
-import { deleteOwnedInterview, listOwnedInterviews } from "@/lib/account/interviews";
+import { listOwnedInterviews } from "@/lib/account/interviews";
 import type { InterviewCard, InterviewStatusName } from "@/lib/account/types";
 import { readyAuth } from "@/lib/firebase/client";
 import { saveInterviewSetup, savePracticeSetup, type InterviewSetup, type SavedInterviewResult } from "@/lib/interview/browser-state";
@@ -30,6 +32,7 @@ export function Dashboard() {
   const [showAll, setShowAll] = useState(false);
   const [questOpen, setQuestOpen] = useState(true);
   const [shareNote, setShareNote] = useState("");
+  const [billingLine, setBillingLine] = useState("");
   const firstName = profile?.firstName || user?.displayName?.split(" ")[0] || "";
   const fullName = profile?.displayName || user?.displayName || firstName || "Account";
 
@@ -47,12 +50,20 @@ export function Dashboard() {
           return body.progress ?? null;
         })
         .catch(() => null),
+      authorizedFetch("/api/billing")
+        .then(async (response) => {
+          if (!response.ok) return "";
+          const body = (await response.json()) as { billing?: Parameters<typeof billingSentence>[0] };
+          return body.billing ? billingSentence(body.billing) : "";
+        })
+        .catch(() => ""),
     ])
-      .then(([items, savedStory, savedProgress]) => {
+      .then(([items, savedStory, savedProgress, line]) => {
         if (cancelled) return;
         setInterviews(items);
         setStory(savedStory);
         setProgress(savedProgress);
+        setBillingLine(line);
       })
       .catch(() => {
         if (!cancelled) setError("Your interviews could not be loaded.");
@@ -70,7 +81,8 @@ export function Dashboard() {
     setError("");
     try {
       if (!user) throw new Error("Sign in to continue.");
-      await deleteOwnedInterview(user.uid, id);
+      const response = await authorizedFetch(`/api/account/interviews/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("That interview could not be deleted.");
       setInterviews((current) => current.filter((item) => item.id !== id));
       setPendingDelete(null);
     } catch (reason) {
@@ -132,6 +144,7 @@ export function Dashboard() {
             {user && !user.emailVerified ? (
               <p className="text-sm text-[#6d675f]">Verify your email when you can. You can keep using InterviewAI.</p>
             ) : null}
+            <CheckoutStatus />
             <section className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="text-xs font-medium tracking-[0.16em] text-[#8a837a] uppercase">Your prep HQ</p>
@@ -139,6 +152,7 @@ export function Dashboard() {
                   Make your next <span style={{ color: coral }}>yes</span> inevitable.
                 </h1>
                 <p className="mt-2 text-[#6d675f]">Small reps. Sharper stories. Big career energy.</p>
+                {billingLine ? <p className="mt-3 text-sm text-[#6d675f]">{billingLine}</p> : null}
               </div>
               <LevelCard progress={progress} loading={loading} fill={levelFill} next={span?.next ?? null} />
             </section>

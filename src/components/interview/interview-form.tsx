@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { UpgradePanel } from "@/components/billing/upgrade-panel";
 import { PageShell } from "@/components/interview/page-shell";
 import { PreparingScreen, type PrepareStepState } from "@/components/interview/preparing-screen";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import type { ResumeCard } from "@/lib/account/types";
 import { readSavedStory } from "@/lib/story/client";
 import type { ProfessionalStory } from "@/lib/story/types";
 import { readInterviewDraft, saveInterviewDraft, saveInterviewSetup, savePreparationDebug } from "@/lib/interview/browser-state";
-import { durationOptions, interviewTypeOptions } from "@/lib/interview/labels";
+import { durationMinutes, durationOptions, interviewTypeOptions } from "@/lib/interview/labels";
 import {
   MAX_COMPANY_CHARS,
   MAX_JOB_LISTING_CHARS,
@@ -53,6 +54,7 @@ export function InterviewForm() {
   const [prepareSteps, setPrepareSteps] = useState<PrepareStepState[]>([]);
   const [savedStory, setSavedStory] = useState<ProfessionalStory | null>(null);
   const [useStory, setUseStory] = useState(false);
+  const [upgrade, setUpgrade] = useState<string | null>(null);
 
   useEffect(() => {
     const draft = readInterviewDraft();
@@ -62,7 +64,7 @@ export function InterviewForm() {
     setJobDescription(draft.jobDescription);
     setInterviewType(draft.interviewType);
     if (draft.interviewMode === "practice" || draft.interviewMode === "mock") setInterviewMode(draft.interviewMode);
-    setDuration(draft.durationChoice);
+    setDuration(draft.durationChoice === "10" || draft.durationChoice === "30" ? draft.durationChoice : "30");
     if (draft.jobListing) setJobListing(draft.jobListing);
     if (draft.jobListing && draft.jobDescription.trim().length >= MIN_JOB_DESCRIPTION_CHARS) {
       setReadListing(draft.jobListing.trim());
@@ -233,7 +235,25 @@ function roleReady() {
     }
 
     saveInterviewDraft(currentDraft());
+    setUpgrade(null);
     setSubmitting(true);
+    try {
+      const preview = await authorizedFetch("/api/billing?action=preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetMinutes: durationMinutes(duration) }),
+      });
+      if (preview.status === 402) {
+        const body = (await preview.json().catch(() => null)) as { error?: string } | null;
+        setUpgrade(body?.error || "Choose a 10-minute Quick Practice or a 30-minute full mock.");
+        setSubmitting(false);
+        return;
+      }
+    } catch {
+      setError("Interview access could not be checked.");
+      setSubmitting(false);
+      return;
+    }
     const steps = initialPrepareSteps(company);
     setPrepareSteps(markStep(steps, "analyzing_resume", "active"));
     let leaving = false;
@@ -257,7 +277,11 @@ function roleReady() {
       );
       const [roleResult, companyResult] = await Promise.all([
         postPrepare("role", { config: intake.body.config }),
-        postPrepare("company", { company: intake.body.config.company, jobTitle: intake.body.config.jobTitle }),
+        postPrepare("company", {
+          company: intake.body.config.company,
+          jobTitle: intake.body.config.jobTitle,
+          targetMinutes: intake.body.config.targetDurationMinutes,
+        }),
       ]);
       if (!roleResult.ok || !isRolePayload(roleResult.body)) {
         setError(roleResult.error || "Preparing the interview was interrupted before it finished. Try again.");
@@ -311,6 +335,7 @@ function roleReady() {
 
   return (
     <PageShell>
+      {upgrade ? <UpgradePanel message={upgrade} /> : null}
       {submitting ? <PreparingScreen company={company} jobTitle={jobTitle} steps={prepareSteps} /> : null}
       <header className="flex flex-col gap-3">
         <h1 className="text-4xl font-semibold tracking-tight">Build your mock interview</h1>
@@ -648,13 +673,14 @@ function postPrepare(stage: string, payload: unknown) {
   }).then(readJsonResponse);
 }
 
-function isIntake(value: Record<string, unknown>): value is { interviewId: string; config: { company: string; jobTitle: string }; resumeFileName: string; durationChoice: string } {
+function isIntake(value: Record<string, unknown>): value is { interviewId: string; config: { company: string; jobTitle: string; targetDurationMinutes: number }; resumeFileName: string; durationChoice: string } {
   const config = value.config;
   return (
     !!config &&
     typeof config === "object" &&
     typeof (config as { company?: unknown }).company === "string" &&
     typeof (config as { jobTitle?: unknown }).jobTitle === "string" &&
+    typeof (config as { targetDurationMinutes?: unknown }).targetDurationMinutes === "number" &&
     typeof value.interviewId === "string" &&
     typeof value.resumeFileName === "string" &&
     typeof value.durationChoice === "string"

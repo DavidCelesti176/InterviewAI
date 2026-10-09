@@ -94,6 +94,7 @@ export function InterviewRoom({
         elapsedMs: latest.elapsedMs,
         assistance: assistanceRef.current,
         pauses: latest.pauseEvents,
+        usageSeconds: latest.usageSeconds,
       });
       if (mode === "practice") {
         savePracticeNotice({ questionCount: Math.max(1, practiceQuestions.length) });
@@ -130,6 +131,7 @@ export function InterviewRoom({
         elapsedMs: latest.elapsedMs,
         assistance: assistanceRef.current,
         pauses: latest.pauseEvents,
+        usageSeconds: latest.usageSeconds,
       })
         .then(() => setSaveWarning(false))
         .catch(() => setSaveWarning(true));
@@ -225,7 +227,7 @@ export function InterviewRoom({
         {snapshot.canStart ? (
           <Button
             type="button"
-            onClick={() => void sessionRef.current?.start(setup.interviewId, setup.interviewerProfileId, setup.targetDurationMinutes)}
+            onClick={() => void sessionRef.current?.start(setup.interviewId, setup.interviewerProfileId, setup.targetDurationMinutes, { interviewMode: interviewModeOf(setup.interviewMode) })}
           >
             {mode === "practice" ? "Start practice" : "Start interview"}
           </Button>
@@ -389,6 +391,7 @@ function persistProgress(
     elapsedMs: number;
     assistance: InterviewAssistanceEvent[];
     pauses: InterviewSnapshot["pauseEvents"];
+    usageSeconds?: number | null;
   },
 ): Promise<void> {
   return authorizedFetch(`/api/account/interviews/${interviewId}/progress`, {

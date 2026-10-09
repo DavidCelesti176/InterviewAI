@@ -12,6 +12,7 @@ import { authorizedFetch } from "@/lib/account/client";
 import { upsertAccountProfile } from "@/lib/account/profile";
 import type { ResumeCard } from "@/lib/account/types";
 import { authErrorMessage } from "@/lib/account/auth-errors";
+import { startCustomerPortal } from "@/lib/billing/checkout-client";
 import { readyAuth } from "@/lib/firebase/client";
 
 export function AccountPage() {
@@ -23,11 +24,30 @@ export function AccountPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pendingResume, setPendingResume] = useState<string | null>(null);
+  const [canManageSubscription, setCanManageSubscription] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
 
   useEffect(() => {
     setFirstName(profile?.firstName ?? "");
     setLastName(profile?.lastName ?? "");
   }, [profile]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void authorizedFetch("/api/billing")
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const body = (await response.json()) as { canManageSubscription?: boolean };
+        return body.canManageSubscription === true;
+      })
+      .then((allowed) => {
+        if (!cancelled) setCanManageSubscription(allowed);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +136,24 @@ export function AccountPage() {
         <Button type="button" variant="secondary" className="w-fit" onClick={() => void resetPassword()}>
           Send password reset email
         </Button>
+        {canManageSubscription ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-fit"
+            disabled={portalBusy}
+            onClick={() => {
+              setPortalBusy(true);
+              setError("");
+              void startCustomerPortal().catch((reason: unknown) => {
+                setError(reason instanceof Error ? reason.message : "The billing portal could not start.");
+                setPortalBusy(false);
+              });
+            }}
+          >
+            {portalBusy ? "Opening…" : "Manage subscription"}
+          </Button>
+        ) : null}
       </Card>
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

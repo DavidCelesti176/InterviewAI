@@ -366,16 +366,19 @@ function AnalysisView({
   return (
     <>
       <ReadinessCard analysis={analysis} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <HighlightCard kind="strength" moment={analysis.strongestMoment} />
-        <HighlightCard kind="opportunity" moment={analysis.missedOpportunity} />
-      </div>
+      {analysis.strongestMoment.title || analysis.missedOpportunity.title ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {analysis.strongestMoment.title ? <HighlightCard kind="strength" moment={analysis.strongestMoment} /> : null}
+          {analysis.missedOpportunity.title ? <HighlightCard kind="opportunity" moment={analysis.missedOpportunity} /> : null}
+        </div>
+      ) : null}
       <SkillBreakdown scores={analysis.categoryScores} />
       <section className="grid gap-4 lg:grid-cols-2">
         <FeedbackColumn title="Strengths" items={analysis.strengths} />
         <FeedbackColumn title="Focus areas" items={analysis.focusAreas} />
       </section>
       <AssistanceSummary analysis={analysis} assistance={assistance} pauseCount={pauseCount} interviewMode={interviewMode} />
+      {analysis.questionFeedback.length > 0 ? (
       <section className="flex flex-col gap-4">
         <h2 className="text-xl font-semibold tracking-tight">Question review</h2>
         {analysis.questionFeedback.map((feedback) => (
@@ -390,6 +393,7 @@ function AnalysisView({
           />
         ))}
       </section>
+      ) : null}
       <SpeakingMetricsPanel metrics={analysis.speakingMetrics} />
       <PracticeRecommendations items={analysis.practiceRecommendations} />
     </>
