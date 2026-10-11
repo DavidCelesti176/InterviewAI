@@ -71,7 +71,7 @@ export function CheckoutStatus() {
   if (state === "ready") return null;
 
   return (
-    <div className="rounded-[20px] border border-[#ece7e0] bg-white px-5 py-4 text-sm">
+    <div className="rounded-[20px] border border-line bg-card px-5 py-4 text-sm text-foreground shadow-card">
       {state === "confirming" ? <p>Payment received. Opening your interview…</p> : null}
       {state === "delayed" ? (
         <p>
