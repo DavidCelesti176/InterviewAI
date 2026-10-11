@@ -415,6 +415,7 @@ export class InterviewSession {
     if (this.continueTimer) clearTimeout(this.continueTimer);
     this.continueTimer = null;
     if (this.openSpeaker === "interviewer") this.flushTurn();
+    const question = this.lastQuestionText();
     this.dropCurrentAnswer();
     this.ignoreCandidateUntilInterviewer = true;
     this.nudgedForTurn = true;
@@ -422,7 +423,7 @@ export class InterviewSession {
       type: "session.instructions.append",
       event_id: this.commandId("restart"),
       delegation_id: null,
-      content: restartQuestionInstruction,
+      content: restartQuestionInstruction(question),
     });
   }
 
@@ -724,6 +725,14 @@ export class InterviewSession {
     if (!this.openingTimer) return;
     clearTimeout(this.openingTimer);
     this.openingTimer = null;
+  }
+
+  private lastQuestionText(): string {
+    for (let index = this.turns.length - 1; index >= 0; index -= 1) {
+      const turn = this.turns[index];
+      if (turn?.speaker === "interviewer" && turn.text.trim()) return turn.text;
+    }
+    return this.openSpeaker === "interviewer" ? this.openText : "";
   }
 
   private hasAskedQuestion(): boolean {
