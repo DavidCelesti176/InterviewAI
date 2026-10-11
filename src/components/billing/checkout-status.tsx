@@ -3,90 +3,92 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { useAuth } from "@/contexts/auth-context";
 import { authorizedFetch } from "@/lib/account/client";
-import { billingSentence } from "@/lib/billing/display";
+import { paymentIsReady } from "@/lib/billing/checkout-return";
 import type { BillingProjection } from "@/lib/billing/types";
 import { readInterviewDraft, readInterviewSetup } from "@/lib/interview/browser-state";
-
-type Snapshot = BillingProjection & { line: string };
 
 function checkoutRequested(): boolean {
   if (typeof window === "undefined") return false;
   return new URLSearchParams(window.location.search).get("checkout") === "success";
 }
 
+function continueInterview(): string | null {
+  const setup = readInterviewSetup();
+  if (setup?.interviewId) return "/interview/live?checkout=success";
+  const draft = readInterviewDraft();
+  if (draft?.company && draft.jobTitle) return "/interview/new?checkout=success";
+  return null;
+}
+
 export function CheckoutStatus() {
   const router = useRouter();
+  const { ready, user } = useAuth();
   const [wanted] = useState(checkoutRequested);
+  const [round, setRound] = useState(0);
   const [state, setState] = useState<"confirming" | "ready" | "delayed">("confirming");
-  const [line, setLine] = useState("");
 
   useEffect(() => {
-    if (!wanted) return;
+    if (!wanted || !ready || !user) return;
     let cancelled = false;
     let attempts = 0;
-
-    async function load(): Promise<Snapshot | null> {
-      const response = await authorizedFetch("/api/billing");
-      if (!response.ok) return null;
-      const body = (await response.json()) as { billing?: BillingProjection };
-      if (!body.billing) return null;
-      return { ...body.billing, line: billingSentence(body.billing) };
-    }
-
-    function confirmed(billing: Snapshot): string | null {
-      if (billing.plan === "plus") return "InterviewAI Plus";
-      if (billing.purchasedCreditsAvailable > 0) return billingSentence(billing);
-      return null;
-    }
+    setState("confirming");
 
     async function poll() {
       try {
-        const billing = await load();
+        const response = await authorizedFetch("/api/billing");
         if (cancelled) return;
-        const message = billing ? confirmed(billing) : null;
-        if (message) {
-          setLine(message);
-          setState("ready");
-          const setup = readInterviewSetup();
-          const draft = readInterviewDraft();
-          if (setup?.interviewId) {
-            router.replace("/interview/live?checkout=success");
+        if (response.ok) {
+          const body = (await response.json()) as { billing?: BillingProjection };
+          if (body.billing && paymentIsReady(body.billing)) {
+            setState("ready");
+            const next = continueInterview();
+            if (next) router.replace(next);
             return;
           }
-          if (draft?.company && draft.jobTitle) {
-            router.replace("/interview/new?checkout=success");
-            return;
-          }
-          return;
         }
-        attempts += 1;
-        if (attempts >= 6) {
-          setState("delayed");
-          return;
-        }
-        window.setTimeout(() => void poll(), 2000);
       } catch {
-        if (!cancelled) setState("delayed");
+        if (cancelled) return;
       }
+      attempts += 1;
+      if (attempts >= 8) {
+        if (!cancelled) setState("delayed");
+        return;
+      }
+      window.setTimeout(() => {
+        if (!cancelled) void poll();
+      }, 1500);
     }
 
     void poll();
     return () => {
       cancelled = true;
     };
-  }, [router, wanted]);
+  }, [ready, router, round, user, wanted]);
 
   if (!wanted) return null;
+  if (state === "ready") return null;
+
   return (
     <div className="rounded-[20px] border border-[#ece7e0] bg-white px-5 py-4 text-sm">
-      {state === "confirming" ? <p>Confirming your purchase…</p> : null}
-      {state === "ready" ? <p>{line}</p> : null}
+      {state === "confirming" ? <p>Payment received. Opening your interview…</p> : null}
       {state === "delayed" ? (
         <p>
-          Payment is still confirming. Refresh in a moment if your credit or Plus plan does not appear yet.
-          <button type="button" className="ml-2 font-medium underline" onClick={() => router.refresh()}>
-            Refresh
+          Your payment is saved. The interview credit is taking a moment to appear.
+          <button
+            type="button"
+            className="ml-2 font-medium underline"
+            onClick={() => {
+              const next = continueInterview();
+              if (next) {
+                router.replace(next);
+                return;
+              }
+              setRound((current) => current + 1);
+            }}
+          >
+            Continue
           </button>
         </p>
       ) : null}
