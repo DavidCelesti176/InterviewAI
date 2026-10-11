@@ -9,6 +9,7 @@ import type { AvatarState } from "@/components/interview/avatar/types";
 import { InterviewHelpPanel } from "@/components/interview/interview-help-panel";
 import { PauseOverlay } from "@/components/interview/pause-overlay";
 import { PreparationDebugPanel } from "@/components/interview/preparation-debug";
+import { UpgradePanel } from "@/components/billing/upgrade-panel";
 import { Button } from "@/components/ui/button";
 import { helpTypeLabel } from "@/lib/interview/assistance";
 import { authorizedFetch } from "@/lib/account/client";
@@ -181,6 +182,13 @@ export function InterviewRoom({
         </p>
       </header>
 
+      {snapshot.paywall ? (
+        <div className="relative flex min-h-0 flex-1 items-start justify-center overflow-auto px-5 py-4">
+          <div className="w-full max-w-xl">
+            <UpgradePanel reason={snapshot.paywall} />
+          </div>
+        </div>
+      ) : (
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-5 text-center">
         <div className="relative min-h-0 w-full flex-1">
           <div className="absolute inset-0 flex items-center justify-center">
@@ -222,9 +230,10 @@ export function InterviewRoom({
         )}
         <div ref={audioSlotRef} className={snapshot.autoplayBlocked ? "mt-4 w-full max-w-md" : "sr-only"} />
       </div>
+      )}
 
       <div className="relative flex shrink-0 flex-wrap items-center justify-center gap-3 px-5 pt-3 pb-4">
-        {snapshot.canStart ? (
+        {snapshot.canStart && !snapshot.paywall ? (
           <Button
             type="button"
             onClick={() => void sessionRef.current?.start(setup.interviewId, setup.interviewerProfileId, setup.targetDurationMinutes, { interviewMode: interviewModeOf(setup.interviewMode) })}
@@ -412,6 +421,7 @@ function roomSignature(snapshot: InterviewSnapshot): string {
     snapshot.status,
     snapshot.muted,
     snapshot.errorMessage,
+    snapshot.paywall,
     snapshot.canStart,
     snapshot.canMute,
     snapshot.canEnd,

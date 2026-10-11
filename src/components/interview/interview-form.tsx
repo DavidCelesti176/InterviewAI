@@ -14,6 +14,8 @@ import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { ProgressSteps } from "@/components/ui/progress-steps";
 import { UploadZone } from "@/components/ui/upload-zone";
 import { authorizedFetch } from "@/lib/account/client";
+import { paywallReason, type PaywallReason } from "@/lib/billing/paywall";
+import type { BillingProjection } from "@/lib/billing/types";
 import type { ResumeCard } from "@/lib/account/types";
 import { readSavedStory } from "@/lib/story/client";
 import type { ProfessionalStory } from "@/lib/story/types";
@@ -36,6 +38,7 @@ export function InterviewForm() {
   const router = useRouter();
   const { user } = useAuth();
   const resumeRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [step, setStep] = useState(0);
   const [company, setCompany] = useState("");
   const [jobTitle, setJobTitle] = useState("");
@@ -50,11 +53,44 @@ export function InterviewForm() {
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const offerRef = useRef<HTMLDivElement>(null);
   const [prepareSteps, setPrepareSteps] = useState<PrepareStepState[]>([]);
   const [savedStory, setSavedStory] = useState<ProfessionalStory | null>(null);
   const [useStory, setUseStory] = useState(false);
-  const [upgrade, setUpgrade] = useState<string | null>(null);
+  const [upgrade, setUpgrade] = useState<PaywallReason | null>(null);
+  const [billing, setBilling] = useState<BillingProjection | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void authorizedFetch("/api/billing")
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const body = (await response.json()) as { billing?: BillingProjection };
+        return body.billing ?? null;
+      })
+      .then((next) => {
+        if (!cancelled) setBilling(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const needsFullCredit =
+    duration === "30" &&
+    billing !== null &&
+    billing.mockCreditsAvailable + billing.purchasedCreditsAvailable === 0;
+  const offer = upgrade ?? (step === 2 && needsFullCredit ? "full_mock" : null);
+
+  useEffect(() => {
+    if (!offer) return;
+    offerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [offer]);
 
   useEffect(() => {
     const draft = readInterviewDraft();
@@ -211,10 +247,12 @@ function roleReady() {
     setStep((current) => Math.min(current + 1, 2));
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onSubmit(event?: FormEvent<HTMLFormElement>, nextDuration?: DurationChoice) {
+    event?.preventDefault();
+    const formElement = event?.currentTarget ?? formRef.current;
+    if (!formElement) return;
     setError(null);
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const resume = form.get("resume");
     const usingSaved = Boolean(selectedResumeId) && (!(resume instanceof File) || resume.size === 0);
     if (!usingSaved && (!(resume instanceof File) || resume.size === 0)) {
@@ -234,26 +272,40 @@ function roleReady() {
       return;
     }
 
-    saveInterviewDraft(currentDraft());
-    setUpgrade(null);
-    setSubmitting(true);
+    const chosen = nextDuration ?? duration;
+    if (nextDuration) setDuration(nextDuration);
+    saveInterviewDraft({ ...currentDraft(), durationChoice: chosen });
+    form.set("duration", chosen);
+    setNotice(null);
+    setChecking(true);
     try {
       const preview = await authorizedFetch("/api/billing?action=preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetMinutes: durationMinutes(duration) }),
+        body: JSON.stringify({ targetMinutes: durationMinutes(chosen) }),
       });
-      if (preview.status === 402) {
-        const body = (await preview.json().catch(() => null)) as { error?: string } | null;
-        setUpgrade(body?.error || "Choose a 10-minute Quick Practice or a 30-minute full mock.");
-        setSubmitting(false);
+      if (!preview.ok) {
+        const body = (await preview.json().catch(() => null)) as { error?: string; code?: string } | null;
+        const reason = paywallReason(body?.code || "");
+        if (reason) {
+          setError(null);
+          setUpgrade(reason);
+        } else {
+          setUpgrade(null);
+          setError(body?.error || "Choose a 10-minute Quick Practice or a 30-minute full mock.");
+        }
+        setChecking(false);
         return;
       }
     } catch {
+      setUpgrade(null);
       setError("Interview access could not be checked.");
-      setSubmitting(false);
+      setChecking(false);
       return;
     }
+    setUpgrade(null);
+    setChecking(false);
+    setSubmitting(true);
     const steps = initialPrepareSteps(company);
     setPrepareSteps(markStep(steps, "analyzing_resume", "active"));
     let leaving = false;
@@ -335,14 +387,14 @@ function roleReady() {
 
   return (
     <PageShell>
-      {upgrade ? <UpgradePanel message={upgrade} /> : null}
+      {notice ? <p className="text-sm text-muted">{notice}</p> : null}
       {submitting ? <PreparingScreen company={company} jobTitle={jobTitle} steps={prepareSteps} /> : null}
       <header className="flex flex-col gap-3">
         <h1 className="text-4xl font-semibold tracking-tight">Build your mock interview</h1>
         <p className="text-lg text-muted">A few details, then you can step into the room.</p>
       </header>
       <ProgressSteps current={step} />
-      <form className="flex flex-col gap-6" onSubmit={(event) => void onSubmit(event)}>
+      <form ref={formRef} className="flex flex-col gap-6" onSubmit={(event) => void onSubmit(event)}>
         <input
           ref={resumeRef}
           id={resumeInputId}
@@ -454,6 +506,19 @@ function roleReady() {
             />
           ) : null}
         </div>
+        {offer ? (
+          <div ref={offerRef}>
+            <UpgradePanel
+              reason={offer}
+              onUseQuick={() => {
+                setDuration("10");
+                setUpgrade(null);
+                setNotice(null);
+                void onSubmit(undefined, "10");
+              }}
+            />
+          </div>
+        ) : null}
         {error ? (
           <p className="text-sm text-danger" role="alert">
             {error}
@@ -461,7 +526,7 @@ function roleReady() {
         ) : null}
         <div className="flex flex-wrap gap-3">
           {step > 0 ? (
-            <Button type="button" variant="secondary" onClick={() => setStep((current) => current - 1)} disabled={submitting}>
+            <Button type="button" variant="secondary" onClick={() => setStep((current) => current - 1)} disabled={submitting || checking}>
               Back
             </Button>
           ) : null}
@@ -474,8 +539,8 @@ function roleReady() {
               Continue
             </Button>
           ) : (
-            <Button type="submit" disabled={submitting}>
-              Get my interview ready
+            <Button type="submit" disabled={submitting || checking || offer === "full_mock"}>
+              {checking ? "Checking access…" : offer === "full_mock" ? "Choose a way to continue" : "Get my interview ready"}
             </Button>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { connectedLimitMs } from "@/lib/billing/products";
+import { PaywallError, paywallReason, type PaywallReason } from "@/lib/billing/paywall";
 import { currentIdToken } from "@/lib/firebase/client";
 import type { InterviewPauseEvent } from "@/lib/interview/help-types";
 import { buildContinueInstruction } from "@/lib/interview/interview-phase";
@@ -25,6 +26,7 @@ export type DebugEntry = {
 export type InterviewSnapshot = {
   status: InterviewStatus;
   errorMessage: string | null;
+  paywall: PaywallReason | null;
   elapsedMs: number;
   muted: boolean;
   level: number;
@@ -63,6 +65,7 @@ export function createSnapshot(): InterviewSnapshot {
   return {
     status: "Ready",
     errorMessage: null,
+    paywall: null,
     elapsedMs: 0,
     muted: false,
     level: 0,
@@ -200,6 +203,9 @@ export class InterviewSession {
     });
     const body: unknown = await response.json().catch(() => null);
     if (!response.ok) {
+      const code = body && typeof body === "object" && "code" in body && typeof body.code === "string" ? body.code : "";
+      const reason = paywallReason(code);
+      if (reason) throw new PaywallError(reason);
       const message = body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : "This interview could not be started.";
       throw new Error(message);
     }
@@ -238,7 +244,7 @@ export class InterviewSession {
     this.resetForStart();
     this.targetDurationMinutes = Number.isFinite(targetDurationMinutes) && targetDurationMinutes > 0 ? targetDurationMinutes : 30;
     this.interviewMode = options?.interviewMode === "practice" ? "practice" : "mock";
-    this.patch({ status: "Connecting", canStart: false, errorMessage: null, autoplayBlocked: false });
+    this.patch({ status: "Connecting", canStart: false, errorMessage: null, paywall: null, autoplayBlocked: false });
 
     try {
       const access = await this.authorize(interviewId, options?.storyPractice === true);
@@ -312,9 +318,7 @@ export class InterviewSession {
         }),
       });
       if (generation !== this.generation) return;
-      if (!response.ok) {
-        throw new Error(await this.readError(response));
-      }
+      if (!response.ok) throw await this.readFailure(response);
 
       const result: unknown = await response.json();
       if (generation !== this.generation) return;
@@ -330,6 +334,18 @@ export class InterviewSession {
       });
     } catch (error) {
       if (generation !== this.generation) return;
+      if (error instanceof PaywallError) {
+        this.releaseMedia();
+        this.patch({
+          status: "Ready",
+          canStart: true,
+          canMute: false,
+          canEnd: false,
+          errorMessage: null,
+          paywall: error.reason,
+        });
+        return;
+      }
       this.fail(startErrorMessage(error));
     }
   }
@@ -775,14 +791,17 @@ export class InterviewSession {
     });
   }
 
-  private async readError(response: Response): Promise<string> {
+  private async readFailure(response: Response): Promise<Error> {
     try {
       const body: unknown = await response.json();
-      if (isRecord(body) && typeof body.error === "string") return body.error;
+      const code = isRecord(body) && typeof body.code === "string" ? body.code : "";
+      const reason = paywallReason(code);
+      if (reason) return new PaywallError(reason);
+      if (isRecord(body) && typeof body.error === "string") return new Error(body.error);
     } catch {
-      return response.statusText || "Live session creation failed";
+      return new Error(response.statusText || "Live session creation failed");
     }
-    return "Live session creation failed";
+    return new Error("Live session creation failed");
   }
 
   private setMicrophoneEnabled(enabled: boolean): void {
@@ -863,6 +882,7 @@ export class InterviewSession {
     this.patch({
       status,
       errorMessage: message,
+      paywall: null,
       canStart: true,
       canMute: false,
       canEnd: false,

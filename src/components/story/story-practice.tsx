@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { InterviewerAvatar } from "@/components/interview/avatar/interviewer-avatar";
 import { interviewerById } from "@/components/interview/avatar/profile";
 import type { AvatarState } from "@/components/interview/avatar/types";
+import { UpgradePanel } from "@/components/billing/upgrade-panel";
 import { PageShell } from "@/components/interview/page-shell";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -166,6 +167,13 @@ function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) 
           {formatElapsed(0)}
         </p>
       </header>
+      {snapshot.paywall ? (
+        <div className="relative flex min-h-0 flex-1 items-start justify-center overflow-auto px-5 py-4">
+          <div className="w-full max-w-xl text-left">
+            <UpgradePanel reason={snapshot.paywall} />
+          </div>
+        </div>
+      ) : (
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-5 text-center">
         <InterviewerAvatar state={avatarState} levelRef={levelRef} profile={interviewer} />
         <p className="mt-2 text-2xl font-semibold">{interviewer.name}</p>
@@ -179,8 +187,9 @@ function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) 
         ) : null}
         <div ref={audioSlotRef} className={snapshot.autoplayBlocked ? "mt-4 w-full max-w-md" : "sr-only"} />
       </div>
+      )}
       <div className="relative flex flex-wrap items-center justify-center gap-3 px-5 pb-6">
-        {snapshot.canStart ? (
+        {snapshot.canStart && !snapshot.paywall ? (
           <Button type="button" onClick={() => void sessionRef.current?.start("", "claire", 3, { storyPractice: true })}>
             Start practice
           </Button>

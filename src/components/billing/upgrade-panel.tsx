@@ -1,46 +1,126 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { Button, ButtonLink } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { authorizedFetch } from "@/lib/account/client";
 import { startCheckout } from "@/lib/billing/checkout-client";
+import type { PaywallReason } from "@/lib/billing/paywall";
 import { products } from "@/lib/billing/products";
+import type { BillingProjection } from "@/lib/billing/types";
+import type { CheckoutProduct } from "@/lib/stripe/catalog";
 
-export function UpgradePanel({ message }: { message: string }) {
-  const [busy, setBusy] = useState<"full_mock" | "plus" | null>(null);
-  const [error, setError] = useState("");
+function dollars(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
-  async function buy(product: "full_mock" | "plus") {
-    setError("");
-    setBusy(product);
+export function UpgradePanel({
+  reason,
+  onUseQuick,
+}: {
+  reason: PaywallReason;
+  onUseQuick?: () => void;
+}) {
+  const [billing, setBilling] = useState<BillingProjection | null>(null);
+  const [pending, setPending] = useState<CheckoutProduct | null>(null);
+  const [checkoutError, setCheckoutError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void authorizedFetch("/api/billing")
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const body = (await response.json()) as { billing?: BillingProjection };
+        return body.billing ?? null;
+      })
+      .then((next) => {
+        if (!cancelled) setBilling(next);
+      })
+      .catch(() => {
+        if (!cancelled) setBilling(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const alreadyPlus = billing?.plan === "plus";
+  const quickAvailable = billing?.freeQuickAvailable === true;
+  const fullPrice = dollars(products.fullInterview.priceCents);
+  const plusPrice = dollars(products.plus.priceCents);
+
+  async function buy(product: CheckoutProduct) {
+    setCheckoutError("");
+    setPending(product);
     try {
       await startCheckout(product);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Checkout could not start.");
-      setBusy(null);
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Checkout could not start.");
+      setPending(null);
     }
   }
 
+  const title = reason === "voice_practice"
+    ? alreadyPlus
+      ? "This month’s voice practices are used"
+      : "Voice practice is included with Plus"
+    : alreadyPlus
+      ? "This month’s interviews are used"
+      : "Keep going with a full interview";
+
+  const detail = reason === "voice_practice"
+    ? alreadyPlus
+      ? "Story practice and answer practice share three sessions a month. They come back with the next Plus period. Written Story Builder stays free."
+      : "Story practice and answer practice share three sessions a month on Plus. Written Story Builder stays free."
+    : alreadyPlus
+      ? "You can buy one more 30-minute interview with the complete review."
+      : "A full mock is 30 minutes with the complete review. Plus includes three of those each month, plus voice practice.";
+
+  const showFull = reason === "full_mock";
+  const showPlus = !alreadyPlus && (reason === "voice_practice" || reason === "full_mock");
+
   return (
-    <div className="rounded-[20px] border border-line bg-card px-5 py-4">
-      <p className="font-medium">This interview needs an available credit.</p>
-      <p className="mt-2 text-sm leading-relaxed text-muted">{message}</p>
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Button type="button" disabled={busy !== null} onClick={() => void buy("full_mock")}>
-          {busy === "full_mock" ? "Starting checkout…" : `Buy Full Mock — $${(products.fullInterview.priceCents / 100).toFixed(2)}`}
-        </Button>
-        <Button type="button" variant="secondary" disabled={busy !== null} onClick={() => void buy("plus")}>
-          {busy === "plus" ? "Starting checkout…" : `Upgrade to Plus — $${(products.plus.priceCents / 100).toFixed(2)}/month`}
-        </Button>
-        <ButtonLink href="/dashboard" variant="ghost">
-          Back to your account
-        </ButtonLink>
-      </div>
-      {error ? (
-        <p className="mt-3 text-sm text-danger" role="alert">
-          {error}
+    <section className="rounded-[24px] border border-line bg-card p-6 text-foreground shadow-[var(--shadow-card)]">
+      <p className="text-sm font-medium text-accent">Ready when you are</p>
+      <h2 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h2>
+      <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">{detail}</p>
+      {showFull || showPlus ? (
+        <div className={`mt-5 grid gap-3 ${showFull && showPlus ? "sm:grid-cols-2" : ""}`}>
+          {showFull ? (
+            <article className="flex flex-col rounded-[18px] border border-line bg-background p-4">
+              <h3 className="text-base font-semibold">One full interview</h3>
+              <p className="mt-1 text-2xl font-semibold tracking-tight">{fullPrice}</p>
+              <p className="mt-1 text-sm text-muted">30 minutes, once, with the full review.</p>
+              <Button type="button" className="mt-4 w-full" variant={showPlus ? "secondary" : "primary"} disabled={pending !== null} onClick={() => void buy("full_mock")}>
+                {pending === "full_mock" ? "Opening checkout…" : `Buy for ${fullPrice}`}
+              </Button>
+            </article>
+          ) : null}
+          {showPlus ? (
+            <article className="flex flex-col rounded-[18px] border border-accent/40 bg-background p-4">
+              <p className="text-xs font-medium tracking-wide text-accent uppercase">Best for more than one interview</p>
+              <h3 className="mt-1 text-base font-semibold">Plus</h3>
+              <p className="mt-1 text-2xl font-semibold tracking-tight">
+                {plusPrice}
+                <span className="text-base font-medium text-muted">/month</span>
+              </p>
+              <p className="mt-1 text-sm text-muted">3 full interviews and 3 voice practices every month.</p>
+              <Button type="button" className="mt-4 w-full" disabled={pending !== null} onClick={() => void buy("plus")}>
+                {pending === "plus" ? "Opening checkout…" : `Get Plus for ${plusPrice}`}
+              </Button>
+            </article>
+          ) : null}
+        </div>
+      ) : null}
+      {checkoutError ? <p className="mt-3 text-sm text-danger">{checkoutError}</p> : null}
+      {reason === "full_mock" && quickAvailable && onUseQuick ? (
+        <p className="mt-4 text-sm text-muted">
+          Your free 10-minute Quick Practice is still open.{" "}
+          <button type="button" className="font-medium text-accent underline-offset-2 hover:underline" onClick={onUseQuick}>
+            Practice for 10 minutes
+          </button>
         </p>
       ) : null}
-    </div>
+    </section>
   );
 }
