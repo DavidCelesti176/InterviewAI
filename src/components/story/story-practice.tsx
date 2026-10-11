@@ -180,7 +180,7 @@ function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) 
         <InterviewerAvatar state={avatarState} levelRef={levelRef} profile={interviewer} />
         <p className="mt-2 text-2xl font-semibold">{interviewer.name}</p>
         <p className="text-sm text-white/70" aria-live="polite">
-          {statusLabel(snapshot.status, snapshot.muted)}
+          {statusLabel(snapshot.status, snapshot.muted, snapshot.opening)}
         </p>
         {checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Practice will be ready in a moment.</p> : null}
         {checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
@@ -202,6 +202,11 @@ function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) 
         {checkoutStatus === "confirming" ? (
           <Button type="button" disabled>
             Confirming payment…
+          </Button>
+        ) : null}
+        {snapshot.canEnd && snapshot.outputTranscript.trim() ? (
+          <Button type="button" variant="room" onClick={() => sessionRef.current?.restartQuestion()}>
+            Restart question
           </Button>
         ) : null}
         <Button
@@ -266,7 +271,8 @@ function toAvatarState(status: InterviewStatus, muted: boolean): AvatarState {
   return "idle";
 }
 
-function statusLabel(status: InterviewStatus, muted: boolean): string {
+function statusLabel(status: InterviewStatus, muted: boolean, opening: boolean): string {
+  if (opening) return "Claire will start in a moment";
   if (status === "Connecting") return "Connecting";
   if (status === "Speaking") return "Claire is asking";
   if (status === "Thinking") return "Claire is listening";

@@ -157,6 +157,12 @@ export function InterviewRoom({
   const pacing = process.env.NODE_ENV === "development" ? pacingDiagnostics(snapshot.turns, snapshot.elapsedMs) : null;
   const coachingEnabled = mode === "interview" && interviewModeOf(setup.interviewMode) === "practice";
   const live = mode === "interview" && snapshot.canEnd && !snapshot.paused && !finished;
+  const canRestart =
+    snapshot.canEnd &&
+    !snapshot.paused &&
+    !finished &&
+    snapshot.outputTranscript.trim().length > 0 &&
+    (mode === "practice" || interviewModeOf(setup.interviewMode) === "practice");
 
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-room text-room-ink">
@@ -209,7 +215,7 @@ export function InterviewRoom({
             <p className="text-2xl font-semibold tracking-tight">{interviewer.name}</p>
             <p className="text-sm text-white/60">{interviewer.title}</p>
             <p className="mt-1 text-sm text-white/80" aria-live="polite">
-              {roomStatusLabel(snapshot.status, snapshot.muted, mode, interviewer.name, thinkingLong)}
+              {roomStatusLabel(snapshot.status, snapshot.muted, mode, interviewer.name, thinkingLong, snapshot.opening)}
             </p>
             {checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Your interview will be ready in a moment.</p> : null}
             {checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
@@ -250,6 +256,11 @@ export function InterviewRoom({
         {checkoutStatus === "confirming" ? (
           <Button type="button" disabled>
             Confirming payment…
+          </Button>
+        ) : null}
+        {canRestart ? (
+          <Button type="button" variant="room" onClick={() => sessionRef.current?.restartQuestion()}>
+            Restart question
           </Button>
         ) : null}
         {live ? (
@@ -447,6 +458,7 @@ function roomSignature(snapshot: InterviewSnapshot): string {
     snapshot.usageSeconds,
     snapshot.contextUsageRatio,
     snapshot.delegationFailures,
+    snapshot.opening,
   ].join("|");
 }
 
@@ -467,10 +479,12 @@ function roomStatusLabel(
   mode: "interview" | "practice",
   name: string,
   thinkingLong: boolean,
+  opening: boolean,
 ): string {
   if (status === "Error") return "Error";
   if (status === "Ended") return "Ended";
   if (status === "Connecting") return "Connecting...";
+  if (opening) return `${name} will start in a moment`;
   if (status === "Thinking") return thinkingLong ? `${name} is still thinking...` : `${name} is thinking...`;
   if (muted && status !== "Speaking") return "Muted";
   if (status === "Speaking") return "Speaking...";

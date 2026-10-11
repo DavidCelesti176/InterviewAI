@@ -4,7 +4,7 @@ import { currentIdToken } from "@/lib/firebase/client";
 import type { InterviewPauseEvent } from "@/lib/interview/help-types";
 import { buildContinueInstruction } from "@/lib/interview/interview-phase";
 import { openingInstruction } from "@/lib/interview/opening";
-import { pauseInstruction, resumeInstruction, resumeRepeatInstruction } from "@/lib/interview/session-cues";
+import { pauseInstruction, restartQuestionInstruction, resumeInstruction, resumeRepeatInstruction } from "@/lib/interview/session-cues";
 import type { InterviewTurn } from "@/lib/interview/types";
 
 export type InterviewStatus =
@@ -46,6 +46,7 @@ export type InterviewSnapshot = {
   usageSeconds: number | null;
   contextUsageRatio: number | null;
   delegationFailures: number;
+  opening: boolean;
 };
 
 type LiveEvent = Record<string, unknown> & { type?: unknown };
@@ -55,6 +56,8 @@ const CLOSE_TIMEOUT_MS = 15_000;
 const SPEAKING_THRESHOLD = 0.02;
 const SPEAKING_HANGOVER_MS = 400;
 const CONTINUE_AFTER_MS = 7_000;
+const OPENING_DELAY_MS = 4_000;
+const OPENING_RETRY_MS = 6_000;
 const THINKING_AFTER_MS = 2_500;
 const DEBUG_LIMIT = 300;
 const BAR_COUNT = 8;
@@ -85,6 +88,7 @@ export function createSnapshot(): InterviewSnapshot {
     usageSeconds: null,
     contextUsageRatio: null,
     delegationFailures: 0,
+    opening: false,
   };
 }
 
@@ -148,6 +152,10 @@ export class InterviewSession {
   private closing = false;
   private cleaned = false;
   private greetingSent = false;
+  private openingTimer: ReturnType<typeof setTimeout> | null = null;
+  private openingAttempts = 0;
+  private restartLockedUntil = 0;
+  private ignoreCandidateUntilInterviewer = false;
   private nextDebugId = 1;
   private nextCommandId = 1;
   private handledDelegations = new Set<string>();
@@ -382,6 +390,7 @@ export class InterviewSession {
     this.audio.pause();
     if (this.continueTimer) clearTimeout(this.continueTimer);
     this.continueTimer = null;
+    this.clearOpeningTimer();
     this.pauseUsageBaseline = this.snapshot.usageSeconds ?? 0;
     this.send({
       type: "session.instructions.append",
@@ -395,6 +404,25 @@ export class InterviewSession {
       canMute: false,
       elapsedMs: this.activeElapsed(),
       voiceUsageWhilePausedSeconds: this.pausedUsageNow(),
+    });
+  }
+
+  restartQuestion(): void {
+    if (!this.ready || this.closing || this.pausedAt !== null || !this.events || this.events.readyState !== "open") return;
+    if (!this.hasAskedQuestion()) return;
+    if (Date.now() < this.restartLockedUntil) return;
+    this.restartLockedUntil = Date.now() + 2_000;
+    if (this.continueTimer) clearTimeout(this.continueTimer);
+    this.continueTimer = null;
+    if (this.openSpeaker === "interviewer") this.flushTurn();
+    this.dropCurrentAnswer();
+    this.ignoreCandidateUntilInterviewer = true;
+    this.nudgedForTurn = true;
+    this.send({
+      type: "session.instructions.append",
+      event_id: this.commandId("restart"),
+      delegation_id: null,
+      content: restartQuestionInstruction,
     });
   }
 
@@ -423,6 +451,11 @@ export class InterviewSession {
       pauseEvents: this.pauseEvents,
       voiceUsageWhilePausedSeconds: this.pausedUsageAccumulated,
     });
+    if (this.lastInterviewerSpeechAt === null) {
+      this.openingAttempts = 0;
+      this.patch({ opening: true });
+      this.armOpening();
+    }
   }
 
   end(): void {
@@ -449,6 +482,10 @@ export class InterviewSession {
     this.closing = false;
     this.cleaned = false;
     this.greetingSent = false;
+    this.clearOpeningTimer();
+    this.openingAttempts = 0;
+    this.restartLockedUntil = 0;
+    this.ignoreCandidateUntilInterviewer = false;
     this.startedAt = null;
     if (this.ceilingTimer) clearTimeout(this.ceilingTimer);
     this.ceilingTimer = null;
@@ -582,6 +619,7 @@ export class InterviewSession {
     if (type === "session.input_transcript.delta") {
       const delta = transcriptDelta(event);
       if (delta) {
+        if (this.ignoreCandidateUntilInterviewer) return;
         this.lastCandidateSpeechAt = Date.now();
         this.nudgedForTurn = false;
         if (this.pausedAt === null) this.scheduleContinue();
@@ -594,7 +632,10 @@ export class InterviewSession {
       const delta = transcriptDelta(event);
       if (delta) {
         this.lastInterviewerSpeechAt = Date.now();
+        this.ignoreCandidateUntilInterviewer = false;
+        this.clearOpeningTimer();
         this.nudgedForTurn = true;
+        if (this.snapshot.opening) this.patch({ opening: false });
         if (this.pausedAt === null) this.resumePlayback();
         this.appendSpeech("interviewer", delta, eventTimestamp(event));
         this.patch({ outputTranscript: this.snapshot.outputTranscript + delta });
@@ -623,6 +664,13 @@ export class InterviewSession {
         this.patch({ muted: false, errorMessage: message });
         return;
       }
+      if (clientEventId.startsWith("greeting_")) {
+        this.clearOpeningTimer();
+        if (this.openingAttempts < 2 && this.lastInterviewerSpeechAt === null) {
+          this.openingTimer = setTimeout(() => this.sendOpening(), 1_500);
+        }
+        return;
+      }
       this.patch({ errorMessage: message });
     }
   }
@@ -641,15 +689,62 @@ export class InterviewSession {
       canEnd: true,
       elapsedMs: 0,
     });
-    if (!this.greetingSent) {
-      this.greetingSent = true;
-      this.send({
-        type: "session.instructions.append",
-        event_id: this.commandId("greeting"),
-        delegation_id: null,
-        content: this.cues?.opening ?? openingInstruction,
-      });
+    this.patch({ opening: true });
+    this.armOpening();
+  }
+
+  private armOpening(): void {
+    this.clearOpeningTimer();
+    this.openingTimer = setTimeout(() => this.sendOpening(), OPENING_DELAY_MS);
+  }
+
+  private sendOpening(): void {
+    this.openingTimer = null;
+    if (this.cleaned || this.closing || !this.ready || this.pausedAt !== null) return;
+    if (this.lastInterviewerSpeechAt !== null) {
+      if (this.snapshot.opening) this.patch({ opening: false });
+      return;
     }
+    if (this.openingAttempts >= 2) {
+      this.patch({ opening: false });
+      return;
+    }
+    this.openingAttempts += 1;
+    this.greetingSent = true;
+    this.send({
+      type: "session.instructions.append",
+      event_id: this.commandId("greeting"),
+      delegation_id: null,
+      content: this.cues?.opening ?? openingInstruction,
+    });
+    this.openingTimer = setTimeout(() => this.sendOpening(), OPENING_RETRY_MS);
+  }
+
+  private clearOpeningTimer(): void {
+    if (!this.openingTimer) return;
+    clearTimeout(this.openingTimer);
+    this.openingTimer = null;
+  }
+
+  private hasAskedQuestion(): boolean {
+    if (this.turns.some((turn) => turn.speaker === "interviewer" && turn.text.trim())) return true;
+    return this.openSpeaker === "interviewer" && this.openText.trim().length > 0;
+  }
+
+  private dropCurrentAnswer(): void {
+    if (this.openSpeaker === "candidate") {
+      this.openSpeaker = null;
+      this.openText = "";
+      this.openTimestamp = 0;
+    }
+    const lastQuestion = this.turns.findLastIndex((turn) => turn.speaker === "interviewer");
+    this.turns = lastQuestion >= 0 ? this.turns.slice(0, lastQuestion + 1) : this.turns.filter((turn) => turn.speaker !== "candidate");
+    const inputTranscript = this.turns
+      .filter((turn) => turn.speaker === "candidate")
+      .map((turn) => turn.text)
+      .join(" ");
+    this.lastCandidateSpeechAt = null;
+    this.patch({ turns: this.turns, inputTranscript });
   }
 
   private onUsage(event: LiveEvent): void {
@@ -873,6 +968,7 @@ export class InterviewSession {
     this.closeTimeout = null;
     if (this.continueTimer) clearTimeout(this.continueTimer);
     this.continueTimer = null;
+    this.clearOpeningTimer();
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (this.ceilingTimer) clearTimeout(this.ceilingTimer);

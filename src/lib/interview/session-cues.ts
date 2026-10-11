@@ -6,3 +6,6 @@ export const resumeInstruction =
 
 export const resumeRepeatInstruction =
   "The candidate is ready. Repeat the current interview question once, naturally, then wait. Do not mention a pause, help, or coaching. Do not add a second question.";
+
+export const restartQuestionInstruction =
+  "The candidate wants to answer the current question again from the start. Stop speaking. Ignore the answer they just gave and do not mention it. Repeat that same question once, naturally, then wait. Do not ask a different question. Do not coach. Do not move on.";

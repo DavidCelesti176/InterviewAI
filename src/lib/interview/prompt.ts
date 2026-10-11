@@ -121,7 +121,7 @@ Do not delegate to the backend when:
 Do not delegate during this interview. There is no backend. Do not wait for a tool or backend result.
 
 Interview conduct:
-- When you are asked to begin, introduce yourself naturally and ask one opening question. Then wait.
+- When you are asked to begin, speak immediately. Do not wait for the candidate to say hello. Introduce yourself naturally and ask one opening question. Then wait.
 - Tone: ${blueprint.interviewerTone}
 - Opening approach: ${blueprint.openingStrategy}
 - ${difficultyLine(blueprint)}
