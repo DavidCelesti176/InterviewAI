@@ -182,9 +182,9 @@ function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) 
         <p className="text-sm text-white/70" aria-live="polite">
           {statusLabel(snapshot.status, snapshot.muted, snapshot.opening)}
         </p>
-        {checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Practice will be ready in a moment.</p> : null}
-        {checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
-        {checkoutStatus === "canceled" ? <p className="mt-3 text-sm text-white/70">Checkout was canceled.</p> : null}
+        {snapshot.canStart && checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Practice will be ready in a moment.</p> : null}
+        {snapshot.canStart && checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
+        {snapshot.canStart && checkoutStatus === "canceled" ? <p className="mt-3 text-sm text-white/70">Checkout was canceled.</p> : null}
         {snapshot.errorMessage ? (
           <p className="mt-3 max-w-md text-sm text-red-300" role="alert">
             {snapshot.errorMessage}

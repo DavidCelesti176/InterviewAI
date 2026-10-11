@@ -217,10 +217,10 @@ export function InterviewRoom({
             <p className="mt-1 text-sm text-white/80" aria-live="polite">
               {roomStatusLabel(snapshot.status, snapshot.muted, mode, interviewer.name, thinkingLong, snapshot.opening)}
             </p>
-            {checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Your interview will be ready in a moment.</p> : null}
-            {checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
-            {checkoutStatus === "canceled" ? <p className="mt-3 text-sm text-white/70">Checkout was canceled. You can pay when you want to start.</p> : null}
-            {checkoutStatus === "delayed" ? <p className="mt-3 text-sm text-white/70">Payment is still confirming. Try Start again in a moment.</p> : null}
+            {snapshot.canStart && checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Your interview will be ready in a moment.</p> : null}
+            {snapshot.canStart && checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
+            {snapshot.canStart && checkoutStatus === "canceled" ? <p className="mt-3 text-sm text-white/70">Checkout was canceled. You can pay when you want to start.</p> : null}
+            {snapshot.canStart && checkoutStatus === "delayed" ? <p className="mt-3 text-sm text-white/70">Payment is still confirming. Try Start again in a moment.</p> : null}
             {mode === "practice" && snapshot.canStart && practiceQuestions.length > 0 ? (
               <ul className="mt-3 flex max-h-24 w-full max-w-lg flex-col gap-1 overflow-auto">
                 {practiceQuestions.map((question, index) => (
