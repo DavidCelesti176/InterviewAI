@@ -17,9 +17,11 @@ function dollars(cents: number): string {
 export function UpgradePanel({
   reason,
   onUseQuick,
+  beforeCheckout,
 }: {
   reason: PaywallReason;
   onUseQuick?: () => void;
+  beforeCheckout?: () => void;
 }) {
   const [billing, setBilling] = useState<BillingProjection | null>(null);
   const [pending, setPending] = useState<CheckoutProduct | null>(null);
@@ -53,6 +55,7 @@ export function UpgradePanel({
     setCheckoutError("");
     setPending(product);
     try {
+      beforeCheckout?.();
       await startCheckout(product);
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Checkout could not start.");

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { InterviewerAvatar } from "@/components/interview/avatar/interviewer-avatar";
 import { interviewerById } from "@/components/interview/avatar/profile";
 import type { AvatarState } from "@/components/interview/avatar/types";
+import { useCheckoutReturn } from "@/components/billing/checkout-return";
 import { UpgradePanel } from "@/components/billing/upgrade-panel";
 import { PageShell } from "@/components/interview/page-shell";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -118,6 +119,7 @@ export function StoryPractice() {
 }
 
 function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) => void }) {
+  const checkoutStatus = useCheckoutReturn();
   const sessionRef = useRef<InterviewSession | null>(null);
   const audioSlotRef = useRef<HTMLDivElement>(null);
   const clockRef = useRef<HTMLParagraphElement>(null);
@@ -180,6 +182,9 @@ function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) 
         <p className="text-sm text-white/70" aria-live="polite">
           {statusLabel(snapshot.status, snapshot.muted)}
         </p>
+        {checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Practice will be ready in a moment.</p> : null}
+        {checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
+        {checkoutStatus === "canceled" ? <p className="mt-3 text-sm text-white/70">Checkout was canceled.</p> : null}
         {snapshot.errorMessage ? (
           <p className="mt-3 max-w-md text-sm text-red-300" role="alert">
             {snapshot.errorMessage}
@@ -189,9 +194,14 @@ function PracticeSession({ onFinished }: { onFinished: (turns: InterviewTurn[]) 
       </div>
       )}
       <div className="relative flex flex-wrap items-center justify-center gap-3 px-5 pb-6">
-        {snapshot.canStart && !snapshot.paywall ? (
+        {snapshot.canStart && !snapshot.paywall && checkoutStatus !== "confirming" ? (
           <Button type="button" onClick={() => void sessionRef.current?.start("", "claire", 3, { storyPractice: true })}>
             Start practice
+          </Button>
+        ) : null}
+        {checkoutStatus === "confirming" ? (
+          <Button type="button" disabled>
+            Confirming payment…
           </Button>
         ) : null}
         <Button

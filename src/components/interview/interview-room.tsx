@@ -9,6 +9,7 @@ import type { AvatarState } from "@/components/interview/avatar/types";
 import { InterviewHelpPanel } from "@/components/interview/interview-help-panel";
 import { PauseOverlay } from "@/components/interview/pause-overlay";
 import { PreparationDebugPanel } from "@/components/interview/preparation-debug";
+import { useCheckoutReturn } from "@/components/billing/checkout-return";
 import { UpgradePanel } from "@/components/billing/upgrade-panel";
 import { Button } from "@/components/ui/button";
 import { helpTypeLabel } from "@/lib/interview/assistance";
@@ -37,6 +38,7 @@ export function InterviewRoom({
   practiceQuestions?: string[];
 }) {
   const router = useRouter();
+  const checkoutStatus = useCheckoutReturn();
   const sessionRef = useRef<InterviewSession | null>(null);
   const audioSlotRef = useRef<HTMLDivElement>(null);
   const clockRef = useRef<HTMLParagraphElement>(null);
@@ -209,6 +211,10 @@ export function InterviewRoom({
             <p className="mt-1 text-sm text-white/80" aria-live="polite">
               {roomStatusLabel(snapshot.status, snapshot.muted, mode, interviewer.name, thinkingLong)}
             </p>
+            {checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Your interview will be ready in a moment.</p> : null}
+            {checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
+            {checkoutStatus === "canceled" ? <p className="mt-3 text-sm text-white/70">Checkout was canceled. You can pay when you want to start.</p> : null}
+            {checkoutStatus === "delayed" ? <p className="mt-3 text-sm text-white/70">Payment is still confirming. Try Start again in a moment.</p> : null}
             {mode === "practice" && snapshot.canStart && practiceQuestions.length > 0 ? (
               <ul className="mt-3 flex max-h-24 w-full max-w-lg flex-col gap-1 overflow-auto">
                 {practiceQuestions.map((question, index) => (
@@ -233,12 +239,17 @@ export function InterviewRoom({
       )}
 
       <div className="relative flex shrink-0 flex-wrap items-center justify-center gap-3 px-5 pt-3 pb-4">
-        {snapshot.canStart && !snapshot.paywall ? (
+        {snapshot.canStart && !snapshot.paywall && checkoutStatus !== "confirming" ? (
           <Button
             type="button"
             onClick={() => void sessionRef.current?.start(setup.interviewId, setup.interviewerProfileId, setup.targetDurationMinutes, { interviewMode: interviewModeOf(setup.interviewMode) })}
           >
             {mode === "practice" ? "Start practice" : "Start interview"}
+          </Button>
+        ) : null}
+        {checkoutStatus === "confirming" ? (
+          <Button type="button" disabled>
+            Confirming payment…
           </Button>
         ) : null}
         {live ? (

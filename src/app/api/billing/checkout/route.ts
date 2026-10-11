@@ -1,3 +1,4 @@
+import { checkoutReturnPath } from "@/lib/billing/checkout-return";
 import { plusPeriodActive } from "@/lib/billing/decide";
 import { readBillingAccount } from "@/lib/billing/store";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
@@ -13,10 +14,12 @@ export async function POST(request: Request) {
   const user = await authenticate(request);
   if (!isUser(user)) return user;
   let productValue: unknown = null;
+  let returnTo = "/dashboard";
   try {
     const parsed: unknown = await request.json();
-    if (parsed && typeof parsed === "object" && "product" in parsed) {
-      productValue = (parsed as { product: unknown }).product;
+    if (parsed && typeof parsed === "object") {
+      if ("product" in parsed) productValue = (parsed as { product: unknown }).product;
+      if ("returnTo" in parsed) returnTo = checkoutReturnPath((parsed as { returnTo: unknown }).returnTo);
     }
   } catch {
     return Response.json({ error: "Choose Full Mock or Plus." }, { status: 400 });
@@ -37,8 +40,8 @@ export async function POST(request: Request) {
       customer,
       client_reference_id: user.uid,
       line_items: [{ price, quantity: 1 }],
-      success_url: `${origin}/dashboard?checkout=success`,
-      cancel_url: `${origin}/dashboard?checkout=canceled`,
+      success_url: `${origin}${returnTo}?checkout=success`,
+      cancel_url: `${origin}${returnTo}?checkout=canceled`,
       metadata: { firebaseUid: user.uid, purchaseType: product },
       ...(product === "full_mock"
         ? {

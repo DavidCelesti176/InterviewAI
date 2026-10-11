@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { authorizedFetch } from "@/lib/account/client";
 import { billingSentence } from "@/lib/billing/display";
 import type { BillingProjection } from "@/lib/billing/types";
+import { readInterviewDraft, readInterviewSetup } from "@/lib/interview/browser-state";
 
 type Snapshot = BillingProjection & { line: string };
 
@@ -47,6 +48,16 @@ export function CheckoutStatus() {
         if (message) {
           setLine(message);
           setState("ready");
+          const setup = readInterviewSetup();
+          const draft = readInterviewDraft();
+          if (setup?.interviewId) {
+            router.replace("/interview/live?checkout=success");
+            return;
+          }
+          if (draft?.company && draft.jobTitle) {
+            router.replace("/interview/new?checkout=success");
+            return;
+          }
           return;
         }
         attempts += 1;
@@ -64,7 +75,7 @@ export function CheckoutStatus() {
     return () => {
       cancelled = true;
     };
-  }, [wanted]);
+  }, [router, wanted]);
 
   if (!wanted) return null;
   return (

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { useCheckoutReturn } from "@/components/billing/checkout-return";
 import { UpgradePanel } from "@/components/billing/upgrade-panel";
 import { PageShell } from "@/components/interview/page-shell";
 import { PreparingScreen, type PrepareStepState } from "@/components/interview/preparing-screen";
@@ -62,6 +63,10 @@ export function InterviewForm() {
   const [useStory, setUseStory] = useState(false);
   const [upgrade, setUpgrade] = useState<PaywallReason | null>(null);
   const [billing, setBilling] = useState<BillingProjection | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [resumesLoaded, setResumesLoaded] = useState(false);
+  const checkoutStatus = useCheckoutReturn();
+  const continued = useRef(false);
 
   useEffect(() => {
     if (!user) return;
@@ -81,11 +86,12 @@ export function InterviewForm() {
     };
   }, [user]);
 
+  const returning = checkoutStatus === "confirming" || checkoutStatus === "ready";
   const needsFullCredit =
     duration === "30" &&
     billing !== null &&
     billing.mockCreditsAvailable + billing.purchasedCreditsAvailable === 0;
-  const offer = upgrade ?? (step === 2 && needsFullCredit ? "full_mock" : null);
+  const offer = returning ? null : upgrade ?? (step === 2 && needsFullCredit ? "full_mock" : null);
 
   useEffect(() => {
     if (!offer) return;
@@ -94,7 +100,10 @@ export function InterviewForm() {
 
   useEffect(() => {
     const draft = readInterviewDraft();
-    if (!draft) return;
+    if (!draft) {
+      setHydrated(true);
+      return;
+    }
     setCompany(draft.company);
     setJobTitle(draft.jobTitle);
     setJobDescription(draft.jobDescription);
@@ -105,6 +114,7 @@ export function InterviewForm() {
     if (draft.jobListing && draft.jobDescription.trim().length >= MIN_JOB_DESCRIPTION_CHARS) {
       setReadListing(draft.jobListing.trim());
     }
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -119,10 +129,14 @@ export function InterviewForm() {
         if (cancelled) return;
         setSavedResumes(items);
         const preferred = preferredResume(items);
-        if (!preferred || resumeRef.current?.files?.[0]) return;
-        setSelectedResumeId((current) => current || preferred.id);
+        if (preferred && !resumeRef.current?.files?.[0]) {
+          setSelectedResumeId((current) => current || preferred.id);
+        }
+        setResumesLoaded(true);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setResumesLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -385,8 +399,27 @@ function roleReady() {
     }
   }
 
+  useEffect(() => {
+    if (checkoutStatus !== "ready" || continued.current || !hydrated || !resumesLoaded || !formRef.current) return;
+    if (!roleReady() || !selectedResumeId) {
+      setStep(2);
+      setNotice(
+        selectedResumeId
+          ? "Payment confirmed. Check the details, then get your interview ready."
+          : "Payment confirmed. Choose your resume, then get your interview ready.",
+      );
+      return;
+    }
+    continued.current = true;
+    setNotice(null);
+    void onSubmit(undefined, duration);
+  }, [checkoutStatus, hydrated, resumesLoaded, selectedResumeId, company, jobTitle, jobDescription, duration]);
+
   return (
     <PageShell>
+      {checkoutStatus === "confirming" ? <p className="text-sm text-muted">Payment received. Finishing your interview.</p> : null}
+      {checkoutStatus === "canceled" ? <p className="text-sm text-muted">Checkout was canceled. Your interview is still here.</p> : null}
+      {checkoutStatus === "delayed" ? <p className="text-sm text-muted">Payment is still confirming. Press Get my interview ready in a moment.</p> : null}
       {notice ? <p className="text-sm text-muted">{notice}</p> : null}
       {submitting ? <PreparingScreen company={company} jobTitle={jobTitle} steps={prepareSteps} /> : null}
       <header className="flex flex-col gap-3">
@@ -510,6 +543,7 @@ function roleReady() {
           <div ref={offerRef}>
             <UpgradePanel
               reason={offer}
+              beforeCheckout={() => saveInterviewDraft(currentDraft())}
               onUseQuick={() => {
                 setDuration("10");
                 setUpgrade(null);
@@ -539,8 +573,8 @@ function roleReady() {
               Continue
             </Button>
           ) : (
-            <Button type="submit" disabled={submitting || checking || offer === "full_mock"}>
-              {checking ? "Checking access…" : offer === "full_mock" ? "Choose a way to continue" : "Get my interview ready"}
+            <Button type="submit" disabled={submitting || checking || offer === "full_mock" || checkoutStatus === "confirming"}>
+              {checkoutStatus === "confirming" ? "Finishing your interview…" : checking ? "Checking access…" : offer === "full_mock" ? "Choose a way to continue" : "Get my interview ready"}
             </Button>
           )}
         </div>

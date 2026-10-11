@@ -2,10 +2,11 @@ import { authorizedFetch } from "@/lib/account/client";
 import type { CheckoutProduct } from "@/lib/stripe/catalog";
 
 export async function startCheckout(product: CheckoutProduct): Promise<void> {
+  const returnTo = window.location.pathname;
   const response = await authorizedFetch("/api/billing/checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ product }),
+    body: JSON.stringify({ product, returnTo }),
   });
   const body = (await response.json()) as { url?: string; error?: string };
   if (!response.ok || !body.url) throw new Error(body.error || "Checkout could not start.");
