@@ -60,21 +60,11 @@ export function UpgradePanel({
     }
   }
 
-  const title = reason === "voice_practice"
-    ? alreadyPlus
-      ? "This month’s voice practices are used"
-      : "Voice practice is included with Plus"
-    : alreadyPlus
-      ? "This month’s interviews are used"
-      : "Keep going with a full interview";
+  const title = alreadyPlus ? "This month’s interview minutes are used" : "Keep going with interview minutes";
 
-  const detail = reason === "voice_practice"
-    ? alreadyPlus
-      ? "Story practice and answer practice share three sessions a month. They come back with the next Plus period. Written Story Builder stays free."
-      : "Story practice and answer practice share three sessions a month on Plus. Written Story Builder stays free."
-    : alreadyPlus
-      ? "You can buy one more 30-minute interview with the complete review."
-      : "A full mock is 30 minutes with the complete review. Plus includes three of those each month, plus voice practice.";
+  const detail = alreadyPlus
+    ? "Purchased minutes stay on your account. Plus minutes come back with the next billing period. Written Story Builder stays free."
+    : "Paid minutes work for a full interview or voice practice. Plus includes 90 minutes each month.";
 
   const showFull = reason === "full_mock";
   const showPlus = !alreadyPlus && (reason === "voice_practice" || reason === "full_mock");
@@ -88,11 +78,11 @@ export function UpgradePanel({
         <div className={`mt-5 grid gap-3 ${showFull && showPlus ? "sm:grid-cols-2" : ""}`}>
           {showFull ? (
             <article className="flex flex-col rounded-[18px] border border-line bg-background p-4">
-              <h3 className="text-base font-semibold">One full interview</h3>
+              <h3 className="text-base font-semibold">30 interview minutes</h3>
               <p className="mt-1 text-2xl font-semibold tracking-tight">{fullPrice}</p>
-              <p className="mt-1 text-sm text-muted">30 minutes, once, with the full review.</p>
+              <p className="mt-1 text-sm text-muted">Use them whenever you want. They do not expire.</p>
               <Button type="button" className="mt-4 w-full" variant={showPlus ? "secondary" : "primary"} disabled={pending !== null} onClick={() => void buy("full_mock")}>
-                {pending === "full_mock" ? "Opening checkout…" : `Buy for ${fullPrice}`}
+                {pending === "full_mock" ? "Opening checkout…" : `Get 30 interview minutes · ${fullPrice}`}
               </Button>
             </article>
           ) : null}
@@ -104,7 +94,7 @@ export function UpgradePanel({
                 {plusPrice}
                 <span className="text-base font-medium text-muted">/month</span>
               </p>
-              <p className="mt-1 text-sm text-muted">3 full interviews and 3 voice practices every month.</p>
+              <p className="mt-1 text-sm text-muted">90 interview minutes / month</p>
               <Button type="button" className="mt-4 w-full" disabled={pending !== null} onClick={() => void buy("plus")}>
                 {pending === "plus" ? "Opening checkout…" : `Get Plus for ${plusPrice}`}
               </Button>

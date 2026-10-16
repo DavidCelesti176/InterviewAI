@@ -66,7 +66,7 @@ test("invoice.paid starts a plus period and retries use the same event id", () =
     billing_reason: "subscription_cycle",
     customer: "cus_1",
     parent: { subscription_details: { subscription: "sub_1" } },
-    lines: { data: [{ period: { start: 1_000, end: 2_000 } }] },
+    lines: { data: [{ period: { start: 1_000, end: 2_000 }, price: "price_plus" }] },
     metadata: { firebaseUid: "user_1" },
   };
   const first = stripeEventIntent(event("invoice.paid", payload, "evt_paid"), env);

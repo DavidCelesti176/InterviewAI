@@ -1,5 +1,3 @@
-import type { BillingProjection } from "@/lib/billing/types";
-
 const returnPaths = new Set([
   "/interview/new",
   "/interview/prepare",
@@ -16,6 +14,11 @@ export function checkoutReturnPath(value: unknown): string {
   return returnPaths.has(normalized) ? normalized : "/dashboard";
 }
 
-export function paymentIsReady(billing: Pick<BillingProjection, "purchasedCreditsAvailable" | "mockCreditsAvailable">): boolean {
-  return billing.purchasedCreditsAvailable > 0 || billing.mockCreditsAvailable > 0;
+export function paymentIsReady(billing: {
+  paidSecondsAvailable?: number;
+  purchasedCreditsAvailable?: number;
+  mockCreditsAvailable?: number;
+}): boolean {
+  if (typeof billing.paidSecondsAvailable === "number") return billing.paidSecondsAvailable > 0;
+  return (billing.purchasedCreditsAvailable ?? 0) > 0 || (billing.mockCreditsAvailable ?? 0) > 0;
 }

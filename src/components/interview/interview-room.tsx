@@ -14,6 +14,8 @@ import { UpgradePanel } from "@/components/billing/upgrade-panel";
 import { Button } from "@/components/ui/button";
 import { helpTypeLabel } from "@/lib/interview/assistance";
 import { authorizedFetch } from "@/lib/account/client";
+import { startLimitCopy } from "@/lib/billing/minutes";
+import type { BillingProjection } from "@/lib/billing/types";
 import { saveInterviewResult, savePracticeNotice, type InterviewSetup } from "@/lib/interview/browser-state";
 import { currentInterviewQuestion, interviewModeOf, type InterviewAssistanceEvent } from "@/lib/interview/help-types";
 import { interviewPhase } from "@/lib/interview/interview-phase";
@@ -54,6 +56,27 @@ export function InterviewRoom({
   const [closingCopy, setClosingCopy] = useState("Interview complete");
   const [thinkingLong, setThinkingLong] = useState(false);
   const [saveWarning, setSaveWarning] = useState(false);
+  const [limitCopy, setLimitCopy] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void authorizedFetch("/api/billing")
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const body = (await response.json()) as { billing?: BillingProjection };
+        return body.billing ?? null;
+      })
+      .then((billing) => {
+        if (cancelled || !billing) return;
+        const requested = Math.round(setup.targetDurationMinutes * 60);
+        const available = setup.targetDurationMinutes <= 10 && billing.freeQuickSecondsAvailable > 0 ? billing.freeQuickSecondsAvailable : billing.paidSecondsAvailable;
+        setLimitCopy(startLimitCopy(requested, available));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [setup.targetDurationMinutes]);
 
   useEffect(() => {
     const session = new InterviewSession(
@@ -217,6 +240,7 @@ export function InterviewRoom({
             <p className="mt-1 text-sm text-white/80" aria-live="polite">
               {roomStatusLabel(snapshot.status, snapshot.muted, mode, interviewer.name, thinkingLong, snapshot.opening)}
             </p>
+            {snapshot.canStart && limitCopy ? <p className="mt-3 text-sm text-white/80">{limitCopy}</p> : null}
             {snapshot.canStart && checkoutStatus === "confirming" ? <p className="mt-3 text-sm text-white/80">Payment received. Your interview will be ready in a moment.</p> : null}
             {snapshot.canStart && checkoutStatus === "ready" ? <p className="mt-3 text-sm text-white/80">Payment confirmed. Start when you’re ready.</p> : null}
             {snapshot.canStart && checkoutStatus === "canceled" ? <p className="mt-3 text-sm text-white/70">Checkout was canceled. You can pay when you want to start.</p> : null}

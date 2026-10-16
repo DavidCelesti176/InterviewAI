@@ -9,6 +9,9 @@ import { CheckoutStatus } from "@/components/billing/checkout-status";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 import { authorizedFetch } from "@/lib/account/client";
+import { startCheckout } from "@/lib/billing/checkout-client";
+import { formatDuration } from "@/lib/billing/minutes";
+import { priceLabel, products } from "@/lib/billing/products";
 import { listOwnedInterviews } from "@/lib/account/interviews";
 import type { InterviewCard, InterviewStatusName } from "@/lib/account/types";
 import type { BillingProjection } from "@/lib/billing/types";
@@ -21,6 +24,8 @@ export function Dashboard() {
   const [interviews, setInterviews] = useState<InterviewCard[]>([]);
   const [progress, setProgress] = useState<ProgressView | null>(null);
   const [billing, setBilling] = useState<BillingProjection | null>(null);
+  const [billingError, setBillingError] = useState("");
+  const [buying, setBuying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -46,11 +51,16 @@ export function Dashboard() {
         .catch(() => null),
       authorizedFetch("/api/billing")
         .then(async (response) => {
-          if (!response.ok) return null;
-          const body = (await response.json()) as { billing?: BillingProjection };
-          return body.billing ?? null;
+          const body = (await response.json().catch(() => null)) as { billing?: BillingProjection; error?: string } | null;
+          if (!response.ok || !body?.billing) {
+            throw new Error(body?.error || "Minutes could not be loaded.");
+          }
+          return body.billing;
         })
-        .catch(() => null),
+        .catch((reason: unknown) => {
+          if (!cancelled) setBillingError(reason instanceof Error ? reason.message : "Minutes could not be loaded.");
+          return null;
+        }),
     ])
       .then(([items, savedProgress, savedBilling]) => {
         if (cancelled) return;
@@ -104,8 +114,21 @@ export function Dashboard() {
             ) : null}
             <CheckoutStatus onBilling={setBilling} />
 
-            <section className="grid gap-4 sm:grid-cols-2" aria-label="Credits and streak">
-              <CreditsCard billing={billing} loading={loading} />
+            <section className="grid gap-4 sm:grid-cols-2" aria-label="Minutes and streak">
+              <CreditsCard
+                billing={billing}
+                loading={loading}
+                error={billingError}
+                buying={buying}
+                onBuy={() => {
+                  setBuying(true);
+                  setBillingError("");
+                  void startCheckout("full_mock").catch((reason: unknown) => {
+                    setBillingError(reason instanceof Error ? reason.message : "Checkout could not start.");
+                    setBuying(false);
+                  });
+                }}
+              />
               <StreakCard progress={progress} loading={loading} />
             </section>
 
@@ -135,6 +158,7 @@ export function Dashboard() {
                   <p className="text-sm text-muted">Pick up where you left off</p>
                   <h3 className="mt-1 text-2xl font-semibold tracking-tight">{featured.company}</h3>
                   <p className="mt-1 text-muted">{featured.jobTitle}</p>
+                  {usedSeconds(featured) > 0 ? <p className="mt-1 text-sm text-muted">{sessionTitle(featured)} · {formatDuration(usedSeconds(featured))}</p> : null}
                   <p className="mt-1 text-sm text-muted">{relativeWhen(featured.completedAt ?? featured.createdAt)}</p>
                   <div className="mt-5">
                     <InterviewAction item={featured} prominent />
@@ -245,25 +269,55 @@ function NavLink({ href, current = false, children }: { href: string; current?: 
   );
 }
 
-function CreditsCard({ billing, loading }: { billing: BillingProjection | null; loading: boolean }) {
+function CreditsCard({
+  billing,
+  loading,
+  error,
+  buying,
+  onBuy,
+}: {
+  billing: BillingProjection | null;
+  loading: boolean;
+  error: string;
+  buying: boolean;
+  onBuy: () => void;
+}) {
   if (loading) return <div className="h-36 rounded-[22px] border border-line bg-card" aria-hidden="true" />;
-  const full = (billing?.purchasedCreditsAvailable ?? 0) + (billing?.mockCreditsAvailable ?? 0);
-  const practice = billing?.practiceSessionsAvailable ?? 0;
+  const paid = billing?.paidSecondsAvailable ?? 0;
+  const monthly = Math.floor((billing?.monthlySecondsAvailable ?? 0) / 60);
+  const purchased = Math.floor((billing?.purchasedSecondsAvailable ?? 0) / 60);
+  const price = priceLabel(products.fullInterview.priceCents);
   return (
     <article className="rounded-[22px] border border-line bg-card p-5 shadow-card">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-muted">Credits</p>
+        <p className="text-sm font-medium text-muted">Minutes</p>
         <p className="text-sm text-muted">{billing?.plan === "plus" ? "Plus" : "Free"}</p>
       </div>
-      <p className="mt-3 text-4xl font-semibold tracking-tight tabular-nums">{billing ? full : "—"}</p>
-      <p className="mt-1 text-sm text-muted">{billing ? (full === 1 ? "full interview ready" : "full interviews ready") : "Credits could not be loaded."}</p>
+      <p className="mt-3 text-4xl font-semibold tracking-tight tabular-nums">{billing ? Math.floor(paid / 60) : "—"}</p>
+      <p className="mt-1 text-sm text-muted">{billing ? "interview minutes available" : error || "Minutes could not be loaded."}</p>
       <ul className="mt-4 flex flex-col gap-1 text-sm text-muted">
-        {billing?.plan === "plus" ? <li>{practice === 1 ? "1 voice practice left" : `${practice} voice practices left`}</li> : null}
-        {billing?.freeQuickAvailable ? <li>1 quick practice ready</li> : null}
+        {billing && paid > 0 ? <li>{monthly} monthly · {purchased} purchased</li> : null}
+        {billing?.freeQuickAvailable ? <li>10-minute Quick Practice ready</li> : null}
         {billing?.cancelAtPeriodEnd ? <li>Plus cancellation is scheduled</li> : null}
       </ul>
+      <Button type="button" className="mt-4" disabled={buying} onClick={onBuy}>
+        {buying ? "Opening checkout…" : `Get 30 interview minutes · ${price}`}
+      </Button>
     </article>
   );
+}
+
+function usedSeconds(item: InterviewCard): number {
+  return item.connectedSeconds ?? item.activeDurationSeconds;
+}
+
+function sessionTitle(item: InterviewCard): string {
+  if (item.interviewType === "hiring-manager") return "Hiring Manager Interview";
+  if (item.interviewType === "behavioral") return "Behavioral Interview";
+  if (item.interviewType === "recruiter") return "Recruiter Screen";
+  if (item.interviewType === "role-specific") return "Role-Specific Interview";
+  if (item.interviewType === "mixed") return "Mixed Interview";
+  return item.jobTitle || "Interview";
 }
 
 function StreakCard({ progress, loading }: { progress: ProgressView | null; loading: boolean }) {
@@ -316,6 +370,7 @@ function InterviewRow({
         )}
         <p className="mt-1 text-sm text-muted">
           {relativeWhen(item.completedAt ?? item.createdAt)}
+          {usedSeconds(item) > 0 ? ` · ${formatDuration(usedSeconds(item))}` : ""}
           {item.status !== "complete" ? ` · ${statusLabel(item.status)}` : ""}
         </p>
       </div>

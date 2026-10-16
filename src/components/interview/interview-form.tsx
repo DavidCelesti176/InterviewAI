@@ -16,6 +16,7 @@ import { ProgressSteps } from "@/components/ui/progress-steps";
 import { UploadZone } from "@/components/ui/upload-zone";
 import { authorizedFetch } from "@/lib/account/client";
 import { paywallReason, type PaywallReason } from "@/lib/billing/paywall";
+import { startLimitCopy } from "@/lib/billing/minutes";
 import { priceLabel, products } from "@/lib/billing/products";
 import type { BillingProjection } from "@/lib/billing/types";
 import type { ResumeCard } from "@/lib/account/types";
@@ -91,7 +92,7 @@ export function InterviewForm() {
   const needsFullCredit =
     duration === "30" &&
     billing !== null &&
-    billing.mockCreditsAvailable + billing.purchasedCreditsAvailable === 0;
+    billing.paidSecondsAvailable === 0;
   const offer = returning ? null : upgrade ?? (step === 2 && needsFullCredit ? "full_mock" : null);
 
   useEffect(() => {
@@ -574,9 +575,16 @@ function roleReady() {
               Continue
             </Button>
           ) : (
-            <Button type="submit" disabled={submitting || checking || offer === "full_mock" || checkoutStatus === "confirming"}>
-              {checkoutStatus === "confirming" ? "Finishing your interview…" : checking ? "Checking access…" : offer === "full_mock" ? "Choose a way to continue" : "Get my interview ready"}
-            </Button>
+            <>
+              {billing ? (
+                <p className="w-full text-sm text-muted">
+                  {startLimitCopy(duration === "10" ? 600 : 1800, duration === "10" ? billing.freeQuickSecondsAvailable : billing.paidSecondsAvailable)}
+                </p>
+              ) : null}
+              <Button type="submit" disabled={submitting || checking || offer === "full_mock" || checkoutStatus === "confirming"}>
+                {checkoutStatus === "confirming" ? "Finishing your interview…" : checking ? "Checking access…" : offer === "full_mock" ? "Choose a way to continue" : "Get my interview ready"}
+              </Button>
+            </>
           )}
         </div>
       </form>
@@ -686,7 +694,7 @@ function InterviewStep({
           ))}
         </div>
         <p className="text-sm text-muted">
-          One 10-minute practice is free. A full 30-minute interview is {priceLabel(products.fullInterview.priceCents)}, or Plus is {priceLabel(products.plus.priceCents)} a month. The conversation may finish slightly early or run a little longer.
+          One 10-minute practice is free. Thirty interview minutes are {priceLabel(products.fullInterview.priceCents)}. Plus is 90 interview minutes a month for {priceLabel(products.plus.priceCents)}.
         </p>
       </div>
       <div className="flex flex-col gap-3">

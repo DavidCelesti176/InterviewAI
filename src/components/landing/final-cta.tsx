@@ -18,7 +18,7 @@ export function FinalCta({ practiceHref }: { practiceHref: string }) {
           </ButtonLink>
         </div>
         <p className="mt-4 text-sm text-white/60">
-          One 10-minute practice is free, with no credit card. A full interview is {priceLabel(products.fullInterview.priceCents)}. Plus is {priceLabel(products.plus.priceCents)} a month.
+          One 10-minute practice is free, with no credit card. Thirty interview minutes are {priceLabel(products.fullInterview.priceCents)}. Plus is 90 interview minutes a month for {priceLabel(products.plus.priceCents)}.
         </p>
       </div>
     </section>

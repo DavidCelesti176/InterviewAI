@@ -1,5 +1,5 @@
-import { decideStart, failReconnect, markSessionLiveStart, releaseReservation, releaseStaleReservations, consumeReservation } from "@/lib/billing/decide";
-import { safetyCeilingMinutes } from "@/lib/billing/products";
+import { decideStart, failReconnect, releaseReservation, releaseStaleReservations } from "@/lib/billing/decide";
+import { markConnected } from "@/lib/billing/minutes";
 import type { BillingAccount, EntitlementCode, Reservation, SessionGrant } from "@/lib/billing/types";
 
 export type LedgerEvent = {
@@ -17,7 +17,7 @@ export type Ledger = {
 };
 
 export type AuthorizeResult =
-  | { ok: true; sessionId: string; reservationId: string; targetMinutes: number; maxMinutes: number; ceilingMinutes: number; reconnect: boolean }
+  | { ok: true; sessionId: string; reservationId: string; targetMinutes: number; maxMinutes: number; ceilingMinutes: number; authorizedSeconds: number; reconnect: boolean }
   | { ok: false; code: EntitlementCode };
 
 export function authorizeLedger(
@@ -75,23 +75,26 @@ export function lockLedger(ledger: Ledger, reservationId: string, sessionId: str
 export function commitLedger(ledger: Ledger, reservationId: string, liveSessionId: string, now: number): { ledger: Ledger; committed: boolean } {
   const reservation = ledger.reservations[reservationId];
   if (!reservation || reservation.status !== "reserved") return { ledger, committed: false };
-  const consumed = consumeReservation(ledger.account, reservation, now, liveSessionId);
-  if (!consumed) return { ledger, committed: false };
+  if (reservation.liveSessionId && reservation.liveSessionId !== "pending") return { ledger, committed: false };
   const session = ledger.sessions[reservation.sessionId];
   if (!session) return { ledger, committed: false };
-  const eventId = `consumed-${reservationId}`;
+  const connected = { ...markConnected(reservation, now), liveSessionId };
+  const source = reservation.source === "reconnect" ? session.entitlementSource : reservation.source;
   return {
     committed: true,
     ledger: {
-      account: consumed.account,
+      ...ledger,
+      reservations: { ...ledger.reservations, [reservationId]: connected },
       sessions: {
         ...ledger.sessions,
-        [session.sessionId]: markSessionLiveStart(session, reservation.source, now),
-      },
-      reservations: { ...ledger.reservations, [reservationId]: consumed.reservation },
-      events: {
-        ...ledger.events,
-        [eventId]: { name: "credit_consumed", at: now, reservationId, source: reservation.source },
+        [session.sessionId]: {
+          ...session,
+          entitlementSource: source,
+          reconnectCount: reservation.source === "reconnect" ? 1 : session.reconnectCount,
+          reconnectClaimExpiresAt: null,
+          firstLiveStartedAt: session.firstLiveStartedAt ?? now,
+          authorizedSeconds: session.authorizedSeconds || reservation.authorizedSeconds,
+        },
       },
     },
   };
@@ -155,13 +158,15 @@ function withReleaseEvents(ledger: Ledger, reservations: Reservation[], now: num
 }
 
 function okResult(decision: Extract<ReturnType<typeof decideStart>, { ok: true }>): AuthorizeResult {
+  const authorizedSeconds = decision.session.authorizedSeconds ?? Math.round(decision.session.maxMinutes * 60);
   return {
     ok: true,
     sessionId: decision.session.sessionId,
     reservationId: decision.reservation.reservationId,
     targetMinutes: decision.session.targetMinutes,
     maxMinutes: decision.session.maxMinutes,
-    ceilingMinutes: safetyCeilingMinutes(decision.session),
+    ceilingMinutes: Math.max(1, Math.ceil(authorizedSeconds / 60)),
+    authorizedSeconds,
     reconnect: decision.reconnect,
   };
 }

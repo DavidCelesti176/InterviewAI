@@ -70,7 +70,7 @@ export function LandingPage({ signedIn = false }: { signedIn?: boolean }) {
               </ButtonLink>
             </div>
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/70">
-              One 10-minute practice is free. A full 30-minute interview is {priceLabel(products.fullInterview.priceCents)}. Plus is {priceLabel(products.plus.priceCents)} a month for three full interviews and three voice practices.
+              One 10-minute practice is free. Thirty interview minutes are {priceLabel(products.fullInterview.priceCents)}. Plus is {priceLabel(products.plus.priceCents)} a month for 90 interview minutes.
             </p>
             <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/75">
               {assurances.map((item) => (

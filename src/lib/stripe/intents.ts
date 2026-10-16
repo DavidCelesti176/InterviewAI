@@ -81,7 +81,7 @@ export function stripeEventIntent(event: Stripe.Event, env: Record<string, strin
     case "checkout.session.completed":
       return checkoutIntent(event.data.object as Stripe.Checkout.Session, event.id, env);
     case "invoice.paid":
-      return paidInvoiceIntent(event.data.object as Stripe.Invoice, event.id);
+      return paidInvoiceIntent(event.data.object as Stripe.Invoice, event.id, env);
     case "invoice.payment_failed":
       return failedInvoiceIntent(event.data.object as Stripe.Invoice, event.id);
     case "customer.subscription.updated":
@@ -116,8 +116,9 @@ function checkoutIntent(session: Stripe.Checkout.Session, eventId: string, env: 
   return { kind: "ignore", reason: "unexpected_mode", eventId };
 }
 
-function paidInvoiceIntent(invoice: Stripe.Invoice, eventId: string): StripeGrantIntent {
+function paidInvoiceIntent(invoice: Stripe.Invoice, eventId: string, env: Record<string, string | undefined>): StripeGrantIntent {
   if (!invoiceGrantsPlusPeriod(invoice)) return { kind: "ignore", reason: "invoice_not_period_grant", eventId };
+  if (!invoicePlusPriceMatches(invoice, env)) return { kind: "ignore", reason: "unexpected_plus_price", eventId };
   const uid = metadataValue(invoice.metadata, "firebaseUid") || metadataValue(invoice.parent && "subscription_details" in invoice.parent ? invoice.parent.subscription_details?.metadata : undefined, "firebaseUid");
   const subscriptionId = invoiceSubscriptionId(invoice);
   const period = invoicePeriod(invoice);
@@ -199,6 +200,20 @@ export function plusPriceMatches(subscription: Stripe.Subscription, env: Record<
     const expected = stripePriceId("plus", env);
     return subscription.items.data.some((item) => stripeObjectId(item.price) === expected);
   } catch {
-    return true;
+    return false;
   }
+}
+
+function invoicePlusPriceMatches(invoice: Stripe.Invoice, env: Record<string, string | undefined>): boolean {
+  let expected = "";
+  try {
+    expected = stripePriceId("plus", env);
+  } catch {
+    return false;
+  }
+  return (invoice.lines?.data ?? []).some((line) => {
+    const legacy = stripeObjectId((line as { price?: unknown }).price);
+    const details = stripeObjectId((line as { pricing?: { price_details?: { price?: unknown } } }).pricing?.price_details?.price);
+    return legacy === expected || details === expected;
+  });
 }

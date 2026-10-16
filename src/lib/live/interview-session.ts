@@ -1,8 +1,8 @@
-import { connectedLimitMs } from "@/lib/billing/products";
+import { heartbeatDueDelay } from "@/lib/billing/minutes";
 import { PaywallError, paywallReason, type PaywallReason } from "@/lib/billing/paywall";
 import { currentIdToken } from "@/lib/firebase/client";
 import type { InterviewPauseEvent } from "@/lib/interview/help-types";
-import { buildContinueInstruction } from "@/lib/interview/interview-phase";
+import { buildContinueInstruction, candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
 import { continueTypeLine } from "@/lib/interview/interview-style";
 import { openingInstruction } from "@/lib/interview/opening";
 import { pauseInstruction, restartQuestionInstruction, resumeInstruction, resumeRepeatInstruction } from "@/lib/interview/session-cues";
@@ -173,6 +173,10 @@ export class InterviewSession {
   private interviewType: InterviewType | null = null;
   private billingSessionId = "";
   private ceilingMs = 0;
+  private authorizedSeconds = 0;
+  private heartbeatTimer: number | null = null;
+  private heartbeatCount = 0;
+  private closingNudged = false;
   private ceilingTimer: ReturnType<typeof setTimeout> | null = null;
   private lastInterviewerSpeechAt: number | null = null;
   private continueTimer: ReturnType<typeof setTimeout> | null = null;
@@ -203,7 +207,7 @@ export class InterviewSession {
     };
   }
 
-  private async authorize(interviewId: string, story: boolean): Promise<{ bypass: boolean; sessionId: string; reservationId: string; targetMinutes: number; ceilingMinutes: number }> {
+  private async authorize(interviewId: string, story: boolean): Promise<{ bypass: boolean; sessionId: string; reservationId: string; targetMinutes: number; ceilingMinutes: number; authorizedSeconds: number }> {
     const token = await currentIdToken();
     if (!token) throw new Error("Sign in to continue.");
     const response = await fetch("/api/billing?action=authorize", {
@@ -226,6 +230,7 @@ export class InterviewSession {
       reservationId: typeof record.reservationId === "string" ? record.reservationId : "",
       targetMinutes: typeof record.targetMinutes === "number" ? record.targetMinutes : 0,
       ceilingMinutes: typeof record.ceilingMinutes === "number" ? record.ceilingMinutes : 0,
+      authorizedSeconds: typeof record.authorizedSeconds === "number" ? record.authorizedSeconds : 0,
     };
   }
 
@@ -237,7 +242,7 @@ export class InterviewSession {
       void fetch("/api/billing?action=close", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-firebase-token": token },
-        body: JSON.stringify({ sessionId, reportedUsageSeconds: this.snapshot.usageSeconds }),
+        body: JSON.stringify({ sessionId }),
       });
     });
   }
@@ -261,7 +266,8 @@ export class InterviewSession {
       const access = await this.authorize(interviewId, options?.storyPractice === true);
       if (generation !== this.generation) return;
       if (!access.bypass && access.targetMinutes > 0) this.targetDurationMinutes = access.targetMinutes;
-      this.ceilingMs = access.ceilingMinutes > 0 ? connectedLimitMs(access.ceilingMinutes) : 0;
+      this.authorizedSeconds = access.authorizedSeconds;
+      this.ceilingMs = access.authorizedSeconds > 0 ? access.authorizedSeconds * 1000 : 0;
       this.billingSessionId = access.sessionId;
       const AudioContextCtor = window.AudioContext;
       this.audioContext = new AudioContextCtor();
@@ -494,6 +500,10 @@ export class InterviewSession {
     if (this.ceilingTimer) clearTimeout(this.ceilingTimer);
     this.ceilingTimer = null;
     this.ceilingMs = 0;
+    this.authorizedSeconds = 0;
+    this.closingNudged = false;
+    this.stopHeartbeat();
+    this.heartbeatCount = 0;
     this.handledDelegations.clear();
     this.speakingUntil = 0;
     this.turns = [];
@@ -686,7 +696,9 @@ export class InterviewSession {
     this.timer = setInterval(() => {
       const elapsed = this.activeElapsed();
       if (elapsed !== this.snapshot.elapsedMs) this.patch({ elapsedMs: elapsed });
+      this.nudgeClosing();
     }, 250);
+    this.armHeartbeat();
     this.patch({
       status: "Listening",
       canMute: true,
@@ -972,6 +984,62 @@ export class InterviewSession {
     this.pausedAt = null;
   }
 
+  private armHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatCount = 0;
+    this.scheduleHeartbeat();
+  }
+
+  private scheduleHeartbeat(): void {
+    const delay = heartbeatDueDelay(this.heartbeatCount);
+    if (delay === 0) {
+      this.heartbeatCount += 1;
+      this.sendHeartbeat();
+      this.scheduleHeartbeat();
+      return;
+    }
+    this.heartbeatTimer = window.setTimeout(() => {
+      this.heartbeatTimer = null;
+      if (this.cleaned || !this.ready) return;
+      this.heartbeatCount += 1;
+      this.sendHeartbeat();
+      this.scheduleHeartbeat();
+    }, delay);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer === null) return;
+    window.clearTimeout(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+  }
+
+  private sendHeartbeat(): void {
+    const sessionId = this.billingSessionId;
+    if (!sessionId) return;
+    void currentIdToken().then((token) => {
+      if (!token) return;
+      void fetch("/api/session/heartbeat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-firebase-token": token },
+        body: JSON.stringify({ sessionId }),
+      });
+    });
+  }
+
+  private nudgeClosing(): void {
+    if (this.closingNudged || this.authorizedSeconds <= 0 || this.startedAt === null || !this.events || this.events.readyState !== "open") return;
+    const connectedMs = Date.now() - this.startedAt;
+    const minutes = this.authorizedSeconds / 60;
+    if (connectedMs < candidateQuestionsNotBeforeMinutes(minutes) * 60_000) return;
+    this.closingNudged = true;
+    this.send({
+      type: "session.instructions.append",
+      event_id: this.commandId("close-soon"),
+      delegation_id: null,
+      content: "The remaining authorized time is short. Invite the candidate's questions, then close.",
+    });
+  }
+
   private finish(status: "Ended" | "Error", message: string | null): void {
     if (this.cleaned) return;
     this.settlePause();
@@ -985,6 +1053,7 @@ export class InterviewSession {
     this.clearOpeningTimer();
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.stopHeartbeat();
     if (this.ceilingTimer) clearTimeout(this.ceilingTimer);
     this.ceilingTimer = null;
     this.releaseMedia();

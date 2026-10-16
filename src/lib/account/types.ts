@@ -12,12 +12,14 @@ export type InterviewCard = {
   company: string;
   jobTitle: string;
   interviewMode: string;
+  interviewType: string;
   sessionKind: "interview" | "practice";
   status: InterviewStatusName;
   createdAt: number;
   updatedAt: number;
   completedAt: number | null;
   activeDurationSeconds: number;
+  connectedSeconds: number | null;
   overallReadiness: number | null;
   resumeFileName: string;
   interviewerProfileId: string;

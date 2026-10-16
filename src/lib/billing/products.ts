@@ -67,7 +67,7 @@ export function connectedLimitMs(ceilingMinutes: number): number {
 }
 
 export function safetyCeilingMinutes(session: { sessionClass: "quick_practice" | "full_mock" | "voice_practice" }): number {
-  if (session.sessionClass === "quick_practice") return QUICK_CEILING_MINUTES;
-  if (session.sessionClass === "full_mock") return FULL_CEILING_MINUTES;
+  if (session.sessionClass === "quick_practice") return QUICK_MINUTES;
+  if (session.sessionClass === "full_mock") return FULL_MINUTES;
   return PRACTICE_MAX_MINUTES;
 }

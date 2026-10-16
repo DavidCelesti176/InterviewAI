@@ -22,6 +22,7 @@ export function PauseOverlay({
           Interview paused
         </h2>
         <p className="mt-3 text-white/70">Take a moment. Resume whenever you&apos;re ready.</p>
+        <p className="mt-3 text-sm text-white/60">Minutes are used while your interview is connected, including pauses. End the interview to stop using minutes.</p>
         {interviewMode === "mock" ? (
           <p className="mt-3 text-sm text-white/50">Pausing means this session is no longer a fully unassisted mock.</p>
         ) : null}

@@ -89,14 +89,14 @@ test("quick practice reserves, consumes as free_quick, then a second one is refu
   });
   assert.equal(reserved.result.ok, true);
   assert.equal(reserved.ledger.reservations["hold-1"]?.source, "free_quick");
-  assert.equal(reserved.ledger.account.freeQuickReserved, 1);
+  assert.equal(reserved.ledger.account.freeQuickSecondsReserved, 600);
   const locked = lockLedger(reserved.ledger, "hold-1", session.sessionId, now);
   assert.equal(locked.grant?.analysisTier, "basic");
   const consumed = commitLedger(locked.ledger, "hold-1", "live-1", now);
   assert.equal(consumed.committed, true);
   assert.equal(consumed.ledger.sessions[session.sessionId]?.entitlementSource, "free_quick");
   assert.equal(consumed.ledger.sessions[session.sessionId]?.analysisTier, "basic");
-  assert.equal(consumed.ledger.events["consumed-hold-1"]?.name, "credit_consumed");
+  assert.equal(consumed.ledger.reservations["hold-1"]?.status, "reserved");
   const second = grant({ sessionId: "session-2", interviewId: "interview-2", sessionClass: "quick_practice", analysisTier: "basic", targetMinutes: 10, maxMinutes: 10 });
   const again = authorizeLedger(
     { ...consumed.ledger, sessions: { ...consumed.ledger.sessions, [second.sessionId]: second } },
@@ -107,13 +107,13 @@ test("quick practice reserves, consumes as free_quick, then a second one is refu
   assert.equal(again.result.ok, false);
   if (again.result.ok) return;
   assert.equal(again.result.code, "PAYMENT_REQUIRED");
-  assert.equal(billingSentence(projectBilling(consumed.ledger.account, now)), "Ready for a full mock?");
+  assert.equal(billingSentence(projectBilling(consumed.ledger.account, now)), "Ready when you add interview minutes.");
 });
 
 test("plus grants three mocks and three practices, and one of each spends only its own pool", () => {
   const account = plus();
-  assert.equal(account.mockGrant, products.plus.grants.mockCredits);
-  assert.equal(account.practiceGrant, products.plus.grants.practiceSessions);
+  assert.equal(account.monthlySecondsGrant, 5400);
+  assert.equal(account.purchasedSecondsGrant, 0);
   const mock = grant();
   const practice = grant({
     sessionId: "practice-1",
@@ -129,16 +129,16 @@ test("plus grants three mocks and three practices, and one of each spends only i
     sessionId: "ignored",
   });
   const spentMock = commitLedger(lockLedger(first.ledger, "mock-hold", mock.sessionId, now).ledger, "mock-hold", "live-mock", now);
-  assert.equal(projectBilling(spentMock.ledger.account, now).mockCreditsAvailable, 2);
-  assert.equal(projectBilling(spentMock.ledger.account, now).practiceSessionsAvailable, 3);
+  assert.equal(spentMock.ledger.account.monthlySecondsReserved, 1800);
+  assert.equal(spentMock.ledger.account.monthlySecondsConsumed, 0);
   const voice = authorizeLedger(spentMock.ledger, { interviewId: practice.interviewId }, now, {
     reservationId: "voice-hold",
     sessionId: "ignored",
   });
   const spentVoice = commitLedger(lockLedger(voice.ledger, "voice-hold", practice.sessionId, now).ledger, "voice-hold", "live-voice", now);
-  assert.equal(projectBilling(spentVoice.ledger.account, now).practiceSessionsAvailable, 2);
-  assert.equal(projectBilling(spentVoice.ledger.account, now).mockCreditsAvailable, 2);
-  assert.equal(billingSentence(projectBilling(spentVoice.ledger.account, now)).startsWith("2 of 3 full interviews left this month."), true);
+  assert.equal(spentVoice.ledger.account.monthlySecondsReserved, 2400);
+  assert.equal(projectBilling(spentVoice.ledger.account, now).paidSecondsAvailable, 3000);
+  assert.equal(billingSentence(projectBilling(spentVoice.ledger.account, now)).includes("50 monthly · 0 purchased"), true);
 });
 
 test("story practice and weak-answer practice share one pool and story has no interview", () => {
@@ -151,22 +151,22 @@ test("story practice and weak-answer practice share one pool and story has no in
   assert.equal(story.ledger.sessions["story-session"]?.maxMinutes, PRACTICE_MAX_MINUTES);
   assert.equal(story.result.ceilingMinutes, PRACTICE_MAX_MINUTES);
   state = commitLedger(lockLedger(story.ledger, "story-hold", "story-session", now).ledger, "story-hold", "live-story", now).ledger;
-  const weak = grant({ sessionId: "weak-1", interviewId: "weak-interview", sessionClass: "voice_practice", practiceKind: "weak_answer", analysisTier: "basic" });
+  const weak = grant({ sessionId: "weak-1", interviewId: "weak-interview", sessionClass: "voice_practice", practiceKind: "weak_answer", analysisTier: "basic", targetMinutes: 10, maxMinutes: 10 });
   state = { ...state, sessions: { ...state.sessions, [weak.sessionId]: weak } };
   const held = authorizeLedger(state, { interviewId: weak.interviewId }, now, { reservationId: "weak-hold", sessionId: "ignored" });
   const after = commitLedger(lockLedger(held.ledger, "weak-hold", weak.sessionId, now).ledger, "weak-hold", "live-weak", now).ledger;
-  assert.equal(practiceSessionsAvailable(after.account, now), 1);
-  assert.equal(mockCreditsAvailable(after.account, now), 3);
+  assert.equal(after.account.monthlySecondsReserved, 1200);
+  assert.equal(projectBilling(after.account, now).paidSecondsAvailable, 4200);
 });
 
 test("purchased credit starts a full mock and does not expire with a period", () => {
   const expiredPlus = {
-    ...plus({ purchasedRemaining: 1, periodEnd: now - 1, freeQuickUsedAt: now - 1000 }),
+    ...plus({ purchasedSecondsGrant: 1800, periodEnd: now - 1, freeQuickUsedAt: now - 1000 }),
     plan: "free" as const,
     subscriptionStatus: null,
   };
   assert.equal(mockCreditsAvailable(expiredPlus, now), 0);
-  assert.equal(purchasedCreditsAvailable(expiredPlus), 1);
+  assert.equal(projectBilling(expiredPlus, now).paidSecondsAvailable, 1800);
   const session = grant();
   const started = authorizeLedger(ledger(expiredPlus, [session]), { interviewId: session.interviewId }, now, {
     reservationId: "buy-1",
@@ -176,24 +176,24 @@ test("purchased credit starts a full mock and does not expire with a period", ()
   assert.equal(consumed.ledger.reservations["buy-1"]?.source, "purchased_mock");
   assert.equal(consumed.ledger.sessions[session.sessionId]?.entitlementSource, "purchased_mock");
   assert.equal(consumed.ledger.sessions[session.sessionId]?.analysisTier, "full");
-  assert.equal(consumed.ledger.account.purchasedRemaining, 0);
-  assert.equal(billingSentence(projectBilling(expiredPlus, now)), "1 full interview credit ready.");
+  assert.equal(consumed.ledger.account.purchasedSecondsReserved, 1800);
+  assert.equal(billingSentence(projectBilling(expiredPlus, now)), "30 purchased interview minutes available.");
 });
 
 test("a plus mock credit is spent before a purchased credit", () => {
-  const account = plus({ purchasedRemaining: 1, mockGrant: 3, mockConsumed: 2 });
+  const account = plus({ purchasedSecondsGrant: 1800, monthlySecondsGrant: 1800 });
   const first = grant({ sessionId: "one", interviewId: "one" });
   const second = grant({ sessionId: "two", interviewId: "two" });
   let state = ledger(account, [first, second]);
   const firstStart = authorizeLedger(state, { interviewId: "one" }, now, { reservationId: "h1", sessionId: "ignored" });
   state = commitLedger(lockLedger(firstStart.ledger, "h1", "one", now).ledger, "h1", "live-1", now).ledger;
   assert.equal(state.reservations.h1?.source, "plus_mock");
-  assert.equal(state.account.purchasedRemaining, 1);
-  assert.equal(mockCreditsAvailable(state.account, now), 0);
+  assert.equal(state.account.purchasedSecondsReserved, 0);
+  assert.equal(state.account.monthlySecondsReserved, 1800);
   const secondStart = authorizeLedger(state, { interviewId: "two" }, now, { reservationId: "h2", sessionId: "ignored" });
   state = commitLedger(lockLedger(secondStart.ledger, "h2", "two", now).ledger, "h2", "live-2", now).ledger;
   assert.equal(state.reservations.h2?.source, "purchased_mock");
-  assert.equal(state.account.purchasedRemaining, 0);
+  assert.equal(state.account.purchasedSecondsReserved, 1800);
 });
 
 test("nothing left and unsupported durations are refused before a grant is spent", () => {
@@ -233,7 +233,8 @@ test("client-supplied plan, credits, stripe ids, and session class do not grant 
   assert.equal(patch.stripeCustomerId, null);
   assert.equal(patch.stripeSubscriptionId, null);
   assert.equal(patch.mockConsumed, 0);
-  assert.equal(patch.mockGrant, 3);
+  assert.equal(patch.mockGrant, 0);
+  assert.equal(patch.monthlySecondsGrant, 5400);
   const session = grant({ sessionClass: "quick_practice", analysisTier: "basic", targetMinutes: 10, maxMinutes: 10 });
   const started = authorizeLedger(ledger(emptyBilling(now), [session]), { interviewId: session.interviewId, sessionClass: "full_mock" } as { interviewId: string }, now, {
     reservationId: "h",
@@ -247,7 +248,7 @@ test("scheduled cancellation keeps credits until the period ends", () => {
   const canceled = scheduleCancellation(plus(), now);
   assert.equal(canceled.subscriptionStatus, "active");
   assert.equal(canceled.cancelAtPeriodEnd, true);
-  assert.equal(mockCreditsAvailable(canceled, now), 3);
+  assert.equal(projectBilling(canceled, now).paidSecondsAvailable, 5400);
   const expired = { ...canceled, periodEnd: now };
   assert.equal(mockCreditsAvailable(expired, now), 0);
   assert.equal(practiceSessionsAvailable(expired, now), 0);
@@ -258,7 +259,7 @@ test("scheduled cancellation keeps credits until the period ends", () => {
 test("one credit can be reserved by only one start", () => {
   const session = grant();
   const other = grant({ sessionId: "other", interviewId: "other" });
-  const account = plus({ mockGrant: 1 });
+  const account = plus({ monthlySecondsGrant: 1800 });
   const first = authorizeLedger(ledger(account, [session, other]), { interviewId: session.interviewId }, now, {
     reservationId: "a",
     sessionId: "ignored",
@@ -270,9 +271,9 @@ test("one credit can be reserved by only one start", () => {
   const secondOther = authorizeLedger(first.ledger, { interviewId: other.interviewId }, now, { reservationId: "c", sessionId: "ignored" });
   assert.equal(secondOther.result.ok, false);
   if (secondOther.result.ok) return;
-  assert.equal(secondOther.result.code, "PAYMENT_REQUIRED");
-  assert.equal(first.ledger.account.mockReserved, 1);
-  assert.equal(first.ledger.account.mockConsumed, 0);
+  assert.equal(secondOther.result.code, "SESSION_LIMIT");
+  assert.equal(first.ledger.account.monthlySecondsReserved, 1800);
+  assert.equal(first.ledger.account.monthlySecondsConsumed, 0);
   assert.ok(first.ledger.account.mockReserved >= 0);
 });
 
@@ -283,7 +284,7 @@ test("a failed live start releases the hold and leaves entitlement unset", () =>
   const released = abortLedger(locked.ledger, "h", now);
   assert.equal(released.reservations.h?.status, "released");
   assert.equal(released.events["released-h"]?.name, "credit_released");
-  assert.equal(mockCreditsAvailable(released.account, now), 3);
+  assert.equal(projectBilling(released.account, now).paidSecondsAvailable, 5400);
   assert.equal(released.sessions[session.sessionId]?.entitlementSource, null);
   const retry = authorizeLedger(released, { interviewId: session.interviewId }, now, { reservationId: "h2", sessionId: "ignored" });
   assert.equal(retry.result.ok, true);
@@ -297,11 +298,11 @@ test("the same reservation cannot be consumed twice and the audit event is writt
   const second = commitLedger(first.ledger, "h", "live-2", now);
   assert.equal(first.committed, true);
   assert.equal(second.committed, false);
-  assert.equal(first.ledger.account.mockConsumed, 1);
-  assert.equal(second.ledger.account.mockConsumed, 1);
-  assert.equal(Object.values(first.ledger.events).filter((event) => event.name === "credit_consumed").length, 1);
-  const again = consumeReservation(first.ledger.account, first.ledger.reservations.h!, now, "live-3");
+  const settled = consumeReservation(first.ledger.account, first.ledger.reservations.h!, now, "live-1");
+  assert.equal(settled?.account.monthlySecondsConsumed, 1800);
+  const again = settled ? consumeReservation(settled.account, settled.reservation, now, "live-3") : null;
   assert.equal(again, null);
+  assert.equal(settled?.account.monthlySecondsConsumed, 1800);
 });
 
 test("a second lock cannot open a second live session for one reservation", () => {
@@ -325,7 +326,7 @@ test("a stale reservation is released inside the next authorization", () => {
   assert.equal(next.ledger.reservations.new?.status, "reserved");
   assert.equal(next.ledger.events["released-old"]?.name, "credit_released");
   assert.equal(next.ledger.events["reserved-new"]?.name, "credit_reserved");
-  assert.equal(next.ledger.account.mockReserved, 1);
+  assert.equal(next.ledger.account.monthlySecondsReserved, 1800);
   assert.equal(next.result.ok, true);
 });
 
@@ -341,14 +342,16 @@ test("one reconnect is free until the candidate speaks, and a failed second crea
   assert.equal(reconnect.result.ok, true);
   if (!reconnect.result.ok) return;
   assert.equal(reconnect.result.reconnect, true);
-  assert.equal(reconnect.ledger.account.mockConsumed, 1);
+  assert.equal(reconnect.ledger.account.monthlySecondsReserved, 1800);
+  assert.equal(reconnect.ledger.account.monthlySecondsConsumed, 0);
   const failed = abortLedger(lockLedger(reconnect.ledger, "r1", session.sessionId, now + 30_000).ledger, "r1", now + 31_000);
   assert.equal(failed.sessions[session.sessionId]?.reconnectCount, 0);
   assert.equal(failed.sessions[session.sessionId]?.reconnectClaimExpiresAt, null);
   const restored = authorizeLedger(failed, { interviewId: session.interviewId }, now + 40_000, { reservationId: "r2", sessionId: "ignored" });
   const connected = commitLedger(lockLedger(restored.ledger, "r2", session.sessionId, now + 40_000).ledger, "r2", "live-2", now + 40_000).ledger;
   assert.equal(connected.sessions[session.sessionId]?.reconnectCount, 1);
-  assert.equal(connected.account.mockConsumed, 1);
+  assert.equal(connected.account.monthlySecondsConsumed, 0);
+  assert.equal(connected.account.monthlySecondsReserved, 1800);
   const third = authorizeLedger(connected, { interviewId: session.interviewId }, now + 50_000, { reservationId: "r3", sessionId: "ignored" });
   assert.equal(third.result.ok, false);
   const spoken = { ...connected, sessions: { ...connected.sessions, [session.sessionId]: { ...connected.sessions[session.sessionId]!, candidateSpoke: true, reconnectCount: 0 } } };
@@ -362,21 +365,15 @@ test("another user's ledger cannot spend this user's reservation", () => {
   const theirs = ledger(plus(), [grant({ sessionId: "theirs", interviewId: "theirs" })]);
   const stolen = lockLedger(theirs, "h", session.sessionId, now);
   assert.equal(stolen.grant, null);
-  assert.equal(mine.ledger.account.mockReserved, 1);
-  assert.equal(theirs.account.mockReserved, 0);
+  assert.equal(mine.ledger.account.monthlySecondsReserved, 1800);
+  assert.equal(theirs.account.monthlySecondsReserved, 0);
 });
 
-test("safety ceilings sit past the natural target and count connected time", () => {
-  assert.equal(safetyCeilingMinutes({ sessionClass: "quick_practice" }), QUICK_CEILING_MINUTES);
-  assert.equal(QUICK_CEILING_MINUTES, 13);
-  assert.equal(safetyCeilingMinutes({ sessionClass: "full_mock" }), FULL_CEILING_MINUTES);
-  assert.equal(FULL_CEILING_MINUTES, 35);
+test("the hard ceiling is the authorized duration, with no unpaid overrun", () => {
+  assert.equal(safetyCeilingMinutes({ sessionClass: "quick_practice" }), 10);
+  assert.equal(safetyCeilingMinutes({ sessionClass: "full_mock" }), 30);
   assert.equal(safetyCeilingMinutes({ sessionClass: "voice_practice" }), 10);
-  const startedAt = now;
-  const pausedMs = 5 * 60 * 1000;
-  const connected = now + connectedLimitMs(13) - startedAt;
-  assert.equal(connected >= connectedLimitMs(13), true);
-  assert.equal(connected - pausedMs < connectedLimitMs(13), true);
+  assert.equal(connectedLimitMs(30), 30 * 60 * 1000);
 });
 
 test("basic analysis is a smaller request than the full report", () => {

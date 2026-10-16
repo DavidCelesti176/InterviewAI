@@ -87,7 +87,7 @@ test("a second quick practice is refused", () => {
 
 test("plus grants three mocks from the catalog and spends one", () => {
   const account = startPlusPeriod(emptyBilling(now), now - 1000, now + 86_400_000, now);
-  assert.equal(account.mockGrant, products.plus.grants.mockCredits);
+  assert.equal(account.monthlySecondsGrant, 5400);
   const decision = decideStart({
     account,
     reservations: [],
@@ -99,8 +99,8 @@ test("plus grants three mocks from the catalog and spends one", () => {
   assert.equal(decision.ok, true);
   if (!decision.ok) return;
   const consumed = consumeReservation(decision.account, decision.reservation, now, "live-1");
-  assert.equal(consumed?.account.mockConsumed, 1);
-  assert.equal(projectBilling(consumed!.account, now).mockCreditsAvailable, 2);
+  assert.equal(consumed?.account.monthlySecondsConsumed, 1800);
+  assert.equal(projectBilling(consumed!.account, now).paidSecondsAvailable, 3600);
 });
 
 test("two holds cannot spend one mock credit", () => {
@@ -143,7 +143,7 @@ test("a failed live start returns the hold", () => {
   if (!decision.ok) return;
   const released = releaseReservation(decision.account, decision.reservation, now);
   assert.equal(released?.reservation.status, "released");
-  assert.equal(projectBilling(released!.account, now).mockCreditsAvailable, 3);
+  assert.equal(projectBilling(released!.account, now).paidSecondsAvailable, 5400);
 });
 
 test("a stale hold is released on the next attempt", () => {
@@ -161,13 +161,13 @@ test("a stale hold is released on the next attempt", () => {
   const stale = { ...held.reservation, expiresAt: now - 1000 };
   const recovered = releaseStaleReservations({ ...held.account, openReservationIds: [stale.reservationId] }, [stale], now);
   assert.equal(recovered.reservations[0]?.status, "released");
-  assert.equal(projectBilling(recovered.account, now).mockCreditsAvailable, 3);
+  assert.equal(projectBilling(recovered.account, now).paidSecondsAvailable, 5400);
 });
 
 test("purchased credit works and monthly credit is spent first", () => {
-  const plus = { ...startPlusPeriod(emptyBilling(now), now - 1000, now + 86_400_000, now), purchasedRemaining: 1 };
+  const plus = { ...startPlusPeriod(emptyBilling(now), now - 1000, now + 86_400_000, now), purchasedSecondsGrant: 1800 };
   assert.equal(chooseFullMockSource(plus, now), "plus_mock");
-  const freeWithPurchase = { ...emptyBilling(now), purchasedRemaining: 1, freeQuickUsedAt: now };
+  const freeWithPurchase = { ...emptyBilling(now), purchasedSecondsGrant: 1800, freeQuickUsedAt: now };
   assert.equal(chooseFullMockSource(freeWithPurchase, now), "purchased_mock");
   const decision = decideStart({
     account: freeWithPurchase,
@@ -198,7 +198,7 @@ test("nothing left refuses a full mock", () => {
 
 test("story practice and weak-answer practice share the plus practice pool", () => {
   const account = startPlusPeriod(emptyBilling(now), now - 1000, now + 86_400_000, now);
-  assert.equal(account.practiceGrant, 3);
+  assert.equal(account.monthlySecondsGrant, 5400);
   const story = decideStart({
     account,
     reservations: [],
@@ -214,7 +214,7 @@ test("story practice and weak-answer practice share the plus practice pool", () 
   assert.equal(story.session.maxMinutes, 10);
   assert.equal(story.session.interviewId, null);
   const weak = decideStart({
-    account: { ...account, practiceReserved: 3 },
+    account: { ...story.account, monthlySecondsGrant: story.account.monthlySecondsReserved, monthlySecondsReserved: story.account.monthlySecondsReserved },
     reservations: [],
     request: { kind: "interview", session: grant({ sessionClass: "voice_practice", practiceKind: "weak_answer", analysisTier: "basic", targetMinutes: 10, maxMinutes: 10 }) },
     reservationId: "hold-2",
@@ -229,16 +229,16 @@ test("scheduling cancellation keeps paid-period credits", () => {
   const canceled = scheduleCancellation(plus, now);
   assert.equal(canceled.subscriptionStatus, "active");
   assert.equal(canceled.cancelAtPeriodEnd, true);
-  assert.equal(projectBilling(canceled, now).mockCreditsAvailable, 3);
+  assert.equal(projectBilling(canceled, now).paidSecondsAvailable, 5400);
 });
 
 test("a purchased credit grant increments remaining and a refund cannot go below zero", () => {
   const granted = grantPurchasedCredit(emptyBilling(now), now);
-  assert.equal(granted.purchasedRemaining, 1);
+  assert.equal(granted.purchasedSecondsGrant, 1800);
   const unused = reverseUnusedPurchasedCredit(granted, now);
   assert.equal(unused.reversed, true);
-  assert.equal(unused.account.purchasedRemaining, 0);
-  const reserved = reverseUnusedPurchasedCredit({ ...granted, purchasedReserved: 1 }, now);
+  assert.equal(unused.account.purchasedSecondsGrant, 0);
+  const reserved = reverseUnusedPurchasedCredit({ ...granted, purchasedSecondsReserved: 1800 }, now);
   assert.equal(reserved.reversed, false);
   assert.equal(reserved.needsReview, true);
   const empty = reverseUnusedPurchasedCredit(emptyBilling(now), now);
@@ -247,11 +247,11 @@ test("a purchased credit grant increments remaining and a refund cannot go below
 });
 
 test("past due does not reset period grants", () => {
-  const plus = { ...startPlusPeriod(emptyBilling(now), now - 1000, now + 86_400_000, now), mockConsumed: 1 };
+  const plus = { ...startPlusPeriod(emptyBilling(now), now - 1000, now + 86_400_000, now), monthlySecondsConsumed: 600 };
   const due = markPastDue(plus, now);
   assert.equal(due.subscriptionStatus, "past_due");
-  assert.equal(due.mockGrant, 3);
-  assert.equal(due.mockConsumed, 1);
+  assert.equal(due.monthlySecondsGrant, 5400);
+  assert.equal(due.monthlySecondsConsumed, 600);
 });
 
 test("cancel at period end stays plus until the subscription is deleted", () => {
@@ -270,7 +270,7 @@ test("cancel at period end stays plus until the subscription is deleted", () => 
   );
   assert.equal(scheduled.plan, "plus");
   assert.equal(scheduled.cancelAtPeriodEnd, true);
-  assert.equal(projectBilling(scheduled, now).mockCreditsAvailable, 3);
+  assert.equal(projectBilling(scheduled, now).paidSecondsAvailable, 5400);
   const ended = syncPlusSubscriptionState(
     scheduled,
     {
@@ -283,7 +283,7 @@ test("cancel at period end stays plus until the subscription is deleted", () => 
   );
   assert.equal(ended.plan, "free");
   assert.equal(ended.subscriptionStatus, "canceled");
-  assert.equal(ended.purchasedRemaining, 0);
+  assert.equal(ended.purchasedSecondsGrant, 0);
 });
 
 test("45 minutes is not a launch product", () => {

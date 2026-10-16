@@ -14,8 +14,8 @@ test("checkout returns to the interview the person was building", () => {
   assert.equal(checkoutReturnPath(null), "/dashboard");
 });
 
-test("a purchase is ready when a full interview credit exists", () => {
+test("a purchase is ready when paid minutes exist", () => {
+  assert.equal(paymentIsReady({ paidSecondsAvailable: 1800 }), true);
+  assert.equal(paymentIsReady({ paidSecondsAvailable: 0 }), false);
   assert.equal(paymentIsReady({ purchasedCreditsAvailable: 1, mockCreditsAvailable: 0 }), true);
-  assert.equal(paymentIsReady({ purchasedCreditsAvailable: 0, mockCreditsAvailable: 3 }), true);
-  assert.equal(paymentIsReady({ purchasedCreditsAvailable: 0, mockCreditsAvailable: 0 }), false);
 });

@@ -3,7 +3,6 @@ import OpenAI from "openai";
 import { abortLive, commitLive, lockReservation } from "@/lib/billing/store";
 import { entitlementResponse } from "@/lib/billing/http";
 import { billingBypassEnabled, liveCreateShouldFail } from "@/lib/billing/enforcement";
-import { safetyCeilingMinutes } from "@/lib/billing/products";
 import type { SessionGrant } from "@/lib/billing/types";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { markInterviewStarted, readProfessionalStory } from "@/lib/firebase/data";
@@ -197,6 +196,7 @@ function pacedConfig(config: InterviewConfig, grant: SessionGrant | null): Inter
 
 function capLine(grant: SessionGrant | null): string {
   if (!grant) return "";
-  const ceiling = safetyCeilingMinutes(grant);
-  return `Aim for about ${grant.targetMinutes} minutes and wrap up naturally. Do not keep the conversation going past ${ceiling} minutes.`;
+  const seconds = grant.authorizedSeconds && grant.authorizedSeconds > 0 ? grant.authorizedSeconds : grant.maxMinutes * 60;
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return `Aim for about ${minutes} minutes and wrap up naturally. Do not keep the conversation going past ${minutes} minutes.`;
 }

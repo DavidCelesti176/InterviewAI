@@ -17,7 +17,7 @@ export default function PrivacyPage() {
           Sign-in uses Firebase Authentication. Interview audio is sent to OpenAI to run the live conversation and the written review. Payment details are entered on Stripe’s checkout page. InterviewAI does not store your card number.
         </p>
         <p>
-          Billing records, including credits and subscription status, are written by the server. They are not readable from the browser. Interviews are saved to your account so you can review them later.
+          Billing records, including interview minutes and subscription status, are written by the server. They are not readable from the browser. Interviews are saved to your account so you can review them later.
         </p>
         <p>
           To ask for a copy of your data or to delete your account, email <a className="text-accent" href={`mailto:${supportEmail}`}>{supportEmail}</a>.

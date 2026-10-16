@@ -10,7 +10,7 @@ export class PaywallError extends Error {
   readonly reason: PaywallReason;
 
   constructor(reason: PaywallReason) {
-    super(reason === "voice_practice" ? "Voice practice needs Plus." : "A full interview needs an available credit.");
+    super(reason === "voice_practice" ? "Voice practice needs available minutes." : "This interview needs available minutes.");
     this.name = "PaywallError";
     this.reason = reason;
   }

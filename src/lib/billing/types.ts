@@ -29,6 +29,16 @@ export type BillingAccount = {
   purchasedReserved: number;
   freeQuickUsedAt: number | null;
   freeQuickReserved: number;
+  freeQuickSecondsGrant: number;
+  freeQuickSecondsConsumed: number;
+  freeQuickSecondsReserved: number;
+  monthlySecondsGrant: number;
+  monthlySecondsConsumed: number;
+  monthlySecondsReserved: number;
+  purchasedSecondsGrant: number;
+  purchasedSecondsConsumed: number;
+  purchasedSecondsReserved: number;
+  minutesMigratedAt: number | null;
   lifetimeFullInterviews: number;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
@@ -60,6 +70,10 @@ export type SessionGrant = {
   liveWallClockSeconds: number;
   reportedUsageSeconds: number | null;
   createdAt: number;
+  authorizedSeconds?: number;
+  consumedSeconds?: number | null;
+  billingStartedAt?: number | null;
+  billingEndedAt?: number | null;
 };
 
 export type Reservation = {
@@ -71,6 +85,15 @@ export type Reservation = {
   expiresAt: number;
   consumedAt: number | null;
   liveSessionId: string | null;
+  authorizedSeconds: number;
+  freeSeconds: number;
+  monthlySeconds: number;
+  purchasedSeconds: number;
+  monthlyPeriodStart: number | null;
+  liveCreatedAt: number | null;
+  startedAt: number | null;
+  lastHeartbeatAt: number | null;
+  consumedSeconds: number | null;
 };
 
 export type BillingProjection = {
@@ -78,6 +101,10 @@ export type BillingProjection = {
   mockCreditsAvailable: number;
   practiceSessionsAvailable: number;
   purchasedCreditsAvailable: number;
+  monthlySecondsAvailable: number;
+  purchasedSecondsAvailable: number;
+  paidSecondsAvailable: number;
+  freeQuickSecondsAvailable: number;
   periodEnd: number | null;
   cancelAtPeriodEnd: boolean;
   freeQuickAvailable: boolean;

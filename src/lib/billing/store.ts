@@ -6,16 +6,20 @@ import {
   attachStripeSubscription,
   emptyBilling,
   closeLiveSegment,
+  consumeReservation,
   endPlusSubscription,
   grantPurchasedCredit,
   markPastDue,
   previewAllowed,
+  plusRenewalKeys,
   projectBilling,
+  renewPlusPeriod,
   reverseUnusedPurchasedCredit,
   startPlusPeriod,
   syncPlusSubscriptionState,
 } from "@/lib/billing/decide";
 import { abortLedger, authorizeLedger, commitLedger, lockLedger, type Ledger } from "@/lib/billing/ledger";
+import { clientUsageRejected, markHeartbeat, staleUsage, usageSeconds } from "@/lib/billing/minutes";
 import type {
   AnalysisTier,
   BillingAccount,
@@ -236,13 +240,67 @@ export async function closeLiveUsageBySession(uid: string, sessionId: string, en
   await closeSession(uid, sessionId, endedAt, reportedUsageSeconds);
 }
 
-async function closeSession(uid: string, sessionId: string, endedAt: number, reportedUsageSeconds: number | null): Promise<void> {
+async function closeSession(uid: string, sessionId: string, endedAt: number, _reportedUsageSeconds: number | null): Promise<void> {
+  await settleVoiceSession(uid, sessionId, endedAt);
+}
+
+export async function settleVoiceSession(uid: string, sessionId: string, endedAt = Date.now()): Promise<{ settled: boolean; consumedSeconds: number }> {
   const db = await database();
-  await db.runTransaction(async (tx) => {
-    const ref = sessionRef(db, uid, sessionId);
-    const snap = await tx.get(ref);
-    if (!snap.exists) return;
-    tx.set(ref, closeLiveSegment(sessionFrom(snap.data() ?? {}, sessionId), endedAt, reportedUsageSeconds));
+  return db.runTransaction(async (tx) => {
+    const accountDoc = accountRef(db, uid);
+    const accountSnap = await tx.get(accountDoc);
+    if (!accountSnap.exists) return { settled: false, consumedSeconds: 0 };
+    const account = accountFrom(accountSnap.data() ?? {});
+    const sessionSnap = await tx.get(sessionRef(db, uid, sessionId));
+    if (!sessionSnap.exists) return { settled: false, consumedSeconds: 0 };
+    const session = sessionFrom(sessionSnap.data() ?? {}, sessionId);
+    const reservations = await openReservations(db, tx, uid, account.openReservationIds);
+    const reservation = reservations.find((item) => item.sessionId === sessionId && item.status === "reserved" && item.source !== "reconnect");
+    if (!reservation) return { settled: true, consumedSeconds: session.consumedSeconds ?? 0 };
+    const consumedSeconds = usageSeconds(reservation.startedAt, endedAt, reservation.authorizedSeconds);
+    const settled = consumeReservation(account, reservation, endedAt, reservation.liveSessionId ?? "", consumedSeconds);
+    if (!settled) return { settled: false, consumedSeconds: 0 };
+    const closed = closeLiveSegment(session, endedAt, null);
+    tx.set(accountDoc, settled.account);
+    tx.set(reservationRef(db, uid, reservation.reservationId), settled.reservation);
+    tx.set(sessionRef(db, uid, sessionId), {
+      ...closed,
+      authorizedSeconds: reservation.authorizedSeconds,
+      consumedSeconds: settled.reservation.consumedSeconds,
+      billingStartedAt: reservation.startedAt,
+      billingEndedAt: endedAt,
+    });
+    if (session.interviewId) {
+      tx.set(db.doc(`users/${uid}/interviews/${session.interviewId}`), { connectedSeconds: settled.reservation.consumedSeconds ?? 0 }, { merge: true });
+    }
+    return { settled: true, consumedSeconds: settled.reservation.consumedSeconds ?? 0 };
+  });
+}
+
+export async function recordHeartbeat(uid: string, sessionId: string, body: Record<string, unknown>, now = Date.now()): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  if (clientUsageRejected(body)) return { ok: false, status: 400, error: "The server measures connected time." };
+  const db = await database();
+  return db.runTransaction(async (tx) => {
+    const accountDoc = accountRef(db, uid);
+    const accountSnap = await tx.get(accountDoc);
+    if (!accountSnap.exists) return { ok: false, status: 404, error: "This session could not be found." };
+    const account = accountFrom(accountSnap.data() ?? {});
+    const reservations = await openReservations(db, tx, uid, account.openReservationIds);
+    const reservation = reservations.find((item) => item.sessionId === sessionId && item.status === "reserved");
+    if (!reservation || reservation.source === "reconnect") return { ok: false, status: 409, error: "This session is no longer running." };
+    const stale = staleUsage(reservation, now);
+    if (stale.settle) {
+      const settled = consumeReservation(account, reservation, now, reservation.liveSessionId ?? "", stale.consumedSeconds);
+      if (settled) {
+        tx.set(accountDoc, settled.account);
+        tx.set(reservationRef(db, uid, reservation.reservationId), settled.reservation);
+      }
+      return { ok: false, status: 409, error: "This session has expired." };
+    }
+    const next = markHeartbeat(reservation, now);
+    if (!next) return { ok: false, status: 409, error: "This session is no longer running." };
+    tx.set(reservationRef(db, uid, reservation.reservationId), next);
+    return { ok: true };
   });
 }
 
@@ -338,13 +396,14 @@ export async function grantPlusPeriodFromStripe(input: {
   periodStart: number;
   periodEnd: number;
 }): Promise<StripeGrantResult> {
-  return mutateBilling(input.uid, input.eventId, [`invoice:${input.invoiceId}`, `period:${input.subscriptionId}:${input.periodStart}`], (account, now) => ({
-    account: startPlusPeriod(
+  return mutateBilling(input.uid, input.eventId, plusRenewalKeys(input), (account, now, reservations) => ({
+    account: renewPlusPeriod(
       attachStripeSubscription(account, { customerId: input.customerId, subscriptionId: input.subscriptionId }, now),
+      reservations,
       input.periodStart,
       input.periodEnd,
       now,
-    ),
+    ).account,
     event: {
       name: "subscription_period_started",
       at: now,
@@ -460,7 +519,7 @@ async function mutateBilling(
   uid: string,
   eventId: string,
   extraKeys: string[],
-  apply: (account: BillingAccount, now: number) => { account: BillingAccount; event: BillingAuditEvent },
+  apply: (account: BillingAccount, now: number, reservations: Reservation[]) => { account: BillingAccount; event: BillingAuditEvent },
 ): Promise<StripeGrantResult> {
   if (!uid) return { applied: false, reason: "missing_user" };
   const db = await database();
@@ -477,7 +536,8 @@ async function mutateBilling(
     const accountDoc = accountRef(db, uid);
     const snap = await tx.get(accountDoc);
     const current = snap.exists ? accountFrom(snap.data() ?? {}) : emptyBilling(now);
-    const next = apply(current, now);
+    const reservations = await openReservations(db, tx, uid, current.openReservationIds);
+    const next = apply(current, now, reservations);
     tx.set(accountDoc, next.account);
     tx.set(eventDoc, next.event);
     for (const key of extraKeys) {
@@ -564,6 +624,16 @@ function accountFrom(data: DocumentData): BillingAccount {
     purchasedReserved: numberOr(data.purchasedReserved),
     freeQuickUsedAt: numberOrNull(data.freeQuickUsedAt),
     freeQuickReserved: numberOr(data.freeQuickReserved),
+    freeQuickSecondsGrant: numberOr(data.freeQuickSecondsGrant),
+    freeQuickSecondsConsumed: numberOr(data.freeQuickSecondsConsumed),
+    freeQuickSecondsReserved: numberOr(data.freeQuickSecondsReserved),
+    monthlySecondsGrant: numberOr(data.monthlySecondsGrant),
+    monthlySecondsConsumed: numberOr(data.monthlySecondsConsumed),
+    monthlySecondsReserved: numberOr(data.monthlySecondsReserved),
+    purchasedSecondsGrant: numberOr(data.purchasedSecondsGrant),
+    purchasedSecondsConsumed: numberOr(data.purchasedSecondsConsumed),
+    purchasedSecondsReserved: numberOr(data.purchasedSecondsReserved),
+    minutesMigratedAt: numberOrNull(data.minutesMigratedAt),
     lifetimeFullInterviews: numberOr(data.lifetimeFullInterviews),
     stripeCustomerId: typeof data.stripeCustomerId === "string" ? data.stripeCustomerId : null,
     stripeSubscriptionId: typeof data.stripeSubscriptionId === "string" ? data.stripeSubscriptionId : null,
@@ -593,6 +663,10 @@ function sessionFrom(data: DocumentData, sessionId: string): SessionGrant {
     liveWallClockSeconds: numberOr(data.liveWallClockSeconds),
     reportedUsageSeconds: numberOrNull(data.reportedUsageSeconds),
     createdAt: numberOr(data.createdAt),
+    authorizedSeconds: numberOr(data.authorizedSeconds),
+    consumedSeconds: numberOrNull(data.consumedSeconds),
+    billingStartedAt: numberOrNull(data.billingStartedAt),
+    billingEndedAt: numberOrNull(data.billingEndedAt),
   };
 }
 
@@ -607,6 +681,15 @@ function reservationFrom(data: DocumentData, reservationId: string): Reservation
     expiresAt: numberOr(data.expiresAt),
     consumedAt: numberOrNull(data.consumedAt),
     liveSessionId: typeof data.liveSessionId === "string" ? data.liveSessionId : null,
+    authorizedSeconds: numberOr(data.authorizedSeconds),
+    freeSeconds: numberOr(data.freeSeconds),
+    monthlySeconds: numberOr(data.monthlySeconds),
+    purchasedSeconds: numberOr(data.purchasedSeconds),
+    monthlyPeriodStart: numberOrNull(data.monthlyPeriodStart),
+    liveCreatedAt: numberOrNull(data.liveCreatedAt),
+    startedAt: numberOrNull(data.startedAt),
+    lastHeartbeatAt: numberOrNull(data.lastHeartbeatAt),
+    consumedSeconds: numberOrNull(data.consumedSeconds),
   };
 }
 

@@ -14,9 +14,13 @@ export async function GET(request: Request) {
     return Response.json({
       billing: {
         plan: "plus",
-        mockCreditsAvailable: 3,
-        practiceSessionsAvailable: 3,
+        mockCreditsAvailable: 1,
+        practiceSessionsAvailable: 0,
         purchasedCreditsAvailable: 0,
+        monthlySecondsAvailable: 5400,
+        purchasedSecondsAvailable: 0,
+        paidSecondsAvailable: 5400,
+        freeQuickSecondsAvailable: 600,
         periodEnd: null,
         cancelAtPeriodEnd: false,
         freeQuickAvailable: true,
@@ -53,13 +57,15 @@ export async function POST(request: Request) {
     return Response.json({ allowed: true });
   }
   if (action === "close") {
+    if ("consumedSeconds" in body || "elapsedSeconds" in body || "balance" in body || "remainingSeconds" in body) {
+      return Response.json({ error: "The server measures connected time." }, { status: 400 });
+    }
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
-    const reported = typeof body.reportedUsageSeconds === "number" && Number.isFinite(body.reportedUsageSeconds) ? body.reportedUsageSeconds : null;
-    if (sessionId) await closeLiveUsageBySession(user.uid, sessionId, Date.now(), reported);
+    if (sessionId) await closeLiveUsageBySession(user.uid, sessionId, Date.now(), null);
     return Response.json({ ok: true });
   }
   if (billingBypassEnabled()) {
-    return Response.json({ bypass: true, sessionId: "", reservationId: "", targetMinutes: 30, maxMinutes: 30, ceilingMinutes: 35, reconnect: false });
+    return Response.json({ bypass: true, sessionId: "", reservationId: "", targetMinutes: 30, maxMinutes: 30, ceilingMinutes: 30, authorizedSeconds: 1800, reconnect: false });
   }
   const result = await authorizeLive(user.uid, {
     interviewId: typeof body.interviewId === "string" ? body.interviewId : null,
