@@ -20,6 +20,7 @@ export function InterviewerPreview() {
               <div
                 className="avatar-stage aspect-[4/5] bg-[radial-gradient(circle_at_50%_18%,#f7f4ef,#d5deea)]"
                 data-avatar-state="idle"
+                data-expression={profile.visualPersonality === "warm" ? "warm" : "direct"}
               >
                 <div className="avatar-figure h-full">
                   <AnimatedInterviewer id={`landing-${profile.id}`} look={profile.look} label={profile.name} />

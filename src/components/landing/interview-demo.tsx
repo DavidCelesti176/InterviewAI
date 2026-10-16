@@ -96,6 +96,7 @@ function DemoCard({
           <div
             className="landing-portrait avatar-stage relative size-16 shrink-0 overflow-hidden rounded-[16px] bg-[radial-gradient(circle_at_50%_18%,#f7f4ef,#d5deea)] sm:size-20"
             data-avatar-state={speaking ? "speaking" : "listening"}
+            data-expression={speaking ? "speaking" : "warm"}
           >
             <div className="avatar-figure h-full">
               <AnimatedInterviewer id={animate ? "demo-claire" : "demo-claire-still"} look={claire.look} label="Claire, AI interviewer" />

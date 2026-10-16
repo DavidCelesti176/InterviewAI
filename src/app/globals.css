@@ -165,11 +165,11 @@ body {
 
 .avatar-halo {
   position: absolute;
-  inset: 14% 10% 20%;
+  inset: 24% 18% 30%;
   z-index: 0;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(126, 112, 255, 0.5), rgba(47, 107, 255, 0.08) 64%, transparent 72%);
-  filter: blur(16px);
+  background: radial-gradient(circle, rgba(126, 112, 255, 0.42), rgba(47, 107, 255, 0.05) 58%, transparent 72%);
+  filter: blur(18px);
   opacity: var(--halo, 0.3);
 }
 
@@ -197,7 +197,9 @@ body {
 .avatar-head,
 .avatar-body,
 .avatar-brow,
-.avatar-lid {
+.avatar-lid,
+.avatar-mouth,
+.avatar-pupil {
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -208,8 +210,8 @@ body {
 
 .avatar-brow {
   fill: none;
-  stroke: #3a2c26;
-  stroke-width: 2.4;
+  stroke: var(--brow, #3a2c26);
+  stroke-width: 2.6;
   stroke-linecap: round;
 }
 
@@ -359,11 +361,27 @@ body {
 @keyframes avatar-breath {
   0%,
   100% {
-    transform: translateY(0);
+    transform: translateY(0) scaleY(1);
   }
   50% {
-    transform: translateY(2.5px);
+    transform: translateY(1px) scaleY(1.012);
   }
+}
+
+[data-expression="warm"] .avatar-mouth {
+  transform: translateY(-0.6px);
+}
+
+[data-expression="direct"] .avatar-brow {
+  transform: translateY(1.2px);
+}
+
+[data-expression="thinking"] .avatar-pupil {
+  transform: translate(-2.5px, -2px);
+}
+
+[data-expression="speaking"] .avatar-mouth {
+  transform: translateY(1.2px);
 }
 
 @keyframes avatar-blink {

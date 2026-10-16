@@ -34,7 +34,10 @@ export function InterviewerPicker({
                 checked={selected}
                 onChange={() => onChange(profile.id)}
               />
-              <span className="relative block overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_50%_18%,#f7f4ef,#d5deea)]">
+              <span
+                className="relative block overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_50%_18%,#f7f4ef,#d5deea)]"
+                data-expression={profile.visualPersonality === "warm" ? "warm" : "direct"}
+              >
                 <AnimatedInterviewer id={`card-${profile.id}`} look={profile.look} />
                 {selected ? (
                   <span className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-accent text-sm text-white" aria-hidden="true">

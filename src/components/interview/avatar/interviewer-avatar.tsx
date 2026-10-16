@@ -4,6 +4,7 @@ import { memo, useRef, type RefObject } from "react";
 
 import { AnimatedInterviewer } from "@/components/interview/avatar/animated-interviewer";
 import { AvatarHalo } from "@/components/interview/avatar/avatar-halo";
+import { expressionFor } from "@/components/interview/avatar/expression";
 import type { AvatarState, InterviewerProfile } from "@/components/interview/avatar/types";
 import { useAvatarAnimation } from "@/components/interview/avatar/use-avatar-animation";
 
@@ -25,6 +26,7 @@ export const InterviewerAvatar = memo(function InterviewerAvatar({
       className="avatar-stage relative aspect-[5/6] h-full max-h-[min(62dvh,560px)] w-auto max-w-full"
       data-avatar-state={state}
       data-avatar-id={profile.id}
+      data-expression={expressionFor(profile.visualPersonality, state)}
       data-mouth="closed"
     >
       <AvatarHalo />
