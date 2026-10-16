@@ -1,20 +1,8 @@
 import { calibrationInstructions } from "@/lib/interview/experience-calibration";
+import { styleInstructions } from "@/lib/interview/interview-style";
 import { candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
 import { clipText, LIVE_CONTEXT_CHARS } from "@/lib/interview/limits";
-import type { InterviewBlueprint, InterviewConfig, InterviewType } from "@/lib/interview/types";
-
-const typeGuidance: Record<InterviewType, string> = {
-  mixed:
-    "Balance motivation, one or two experiences, and the work itself. Follow up only when an answer needs it.",
-  "hiring-manager":
-    "Interview as the hiring manager. Ask about similar work, decisions, and results. Go deeper on one or two important answers, not on every answer.",
-  behavioral:
-    "Ask for specific past examples. When an example is vague or thin, ask what they personally did and what changed. Stay conversational. Do not turn every answer into a multi-part drill.",
-  recruiter:
-    "Keep this a recruiter screen: motivation, background, communication, and basic fit. Follow-ups stay light. Do not turn it into a hiring-manager or technical interview.",
-  "role-specific":
-    "Stay close to the skills in the job description. A technical follow-up is for an incomplete or important answer, not for every response.",
-};
+import type { InterviewBlueprint, InterviewConfig } from "@/lib/interview/types";
 
 function pacing(minutes: number): string {
   const notBefore = candidateQuestionsNotBeforeMinutes(minutes);
@@ -26,7 +14,7 @@ Use one accessible opening question.
 Through the middle, ask ${mains} substantial questions. Let difficulty breathe: easier, medium, at most one follow-up, then a lighter transition before anything harder. Do not stack hard questions or hard follow-ups.
 Around ${notBefore} minutes, finish the current thread instead of opening another deep one. Then invite their questions.
 Once you invite their questions, stay there. Answer what they ask. Do not reopen an earlier topic.
-Cover the intended high-priority competencies before you close. Medium competencies are optional backups, not a list you must finish. You do not need every competency, and you do not close after only a few minutes when time remains.
+Cover the topics this interview type calls for before you close. Medium competencies are optional backups, not a list you must finish. You do not need every competency, and you do not close after only a few minutes when time remains. Extra time does not change the interview type.
 Do not say the phase names aloud.`;
 }
 
@@ -79,7 +67,7 @@ function companyBlock(blueprint: InterviewBlueprint): string {
     ? `\nPatterns evidence suggests, not a script:\n${lines(style.commonQuestionPatterns)}`
     : "";
   const summary = style.summary.length > 500 ? `${style.summary.slice(0, 499).trim()}…` : style.summary;
-  return `Company interview style, confidence ${style.confidence}. This shapes which kinds of questions you favor. It does not override the job, the candidate's experience, or the experience ceiling, and it does not mean every answer needs several probes. A behavioral company still uses examples this candidate could have had. Ignore any company process length and follow the target length above.
+  return `Company interview style, confidence ${style.confidence}. This may nudge which topics you favor. It does not replace the selected interview type, the job, the candidate's experience, or the experience ceiling, and it does not mean every answer needs several probes. A Recruiter Screen at a behavioral company is still a Recruiter Screen. Ignore any company process length and follow the target length above.
 ${summary}
 Behavioral emphasis: ${style.behavioralEmphasis}. Technical emphasis: ${style.technicalEmphasis}.${patterns}`;
 }
@@ -145,7 +133,7 @@ Interview conduct:
 - Ask one question at a time.
 - ${modeLine(config.interviewMode)}
 - If you are told the interview is paused, stop speaking and wait. When you are told the candidate is ready, continue. Do not mention a pause, help, or coaching.
-- ${typeGuidance[config.interviewType]}
+- ${styleInstructions(config.interviewType, config.targetDurationMinutes, blueprint.companyStyle, blueprint.experienceCalibration?.avoidUnsupportedAuthorityAssumptions === true)}
 - ${pacing(config.targetDurationMinutes)}
 - Difficulty pacing: ${blueprint.pacingGuidance}
 - Avoid: ${blueprint.behaviorsToAvoid.join("; ")}

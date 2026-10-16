@@ -33,10 +33,9 @@ export function authErrorMessage(error: unknown, fallback = "Something went wron
   }
 }
 
-export function passwordProblem(password: string, confirm: string): string | null {
+export function passwordProblem(password: string): string | null {
   if (password.length < 8) return "Use at least 8 characters.";
   if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Use at least one letter and one number.";
-  if (password !== confirm) return "Those passwords don't match.";
   return null;
 }
 

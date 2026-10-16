@@ -3,9 +3,10 @@ import { PaywallError, paywallReason, type PaywallReason } from "@/lib/billing/p
 import { currentIdToken } from "@/lib/firebase/client";
 import type { InterviewPauseEvent } from "@/lib/interview/help-types";
 import { buildContinueInstruction } from "@/lib/interview/interview-phase";
+import { continueTypeLine } from "@/lib/interview/interview-style";
 import { openingInstruction } from "@/lib/interview/opening";
 import { pauseInstruction, restartQuestionInstruction, resumeInstruction, resumeRepeatInstruction } from "@/lib/interview/session-cues";
-import type { InterviewTurn } from "@/lib/interview/types";
+import type { InterviewTurn, InterviewType } from "@/lib/interview/types";
 
 export type InterviewStatus =
   | "Ready"
@@ -169,6 +170,7 @@ export class InterviewSession {
   private lastCandidateSpeechAt: number | null = null;
   private targetDurationMinutes = 30;
   private interviewMode: "practice" | "mock" = "mock";
+  private interviewType: InterviewType | null = null;
   private billingSessionId = "";
   private ceilingMs = 0;
   private ceilingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -244,7 +246,7 @@ export class InterviewSession {
     interviewId: string,
     interviewerId?: string,
     targetDurationMinutes = 30,
-    options?: { storyPractice?: boolean; interviewMode?: "practice" | "mock" },
+    options?: { storyPractice?: boolean; interviewMode?: "practice" | "mock"; interviewType?: InterviewType },
   ): Promise<void> {
     if (!this.snapshot.canStart) return;
     this.generation += 1;
@@ -252,6 +254,7 @@ export class InterviewSession {
     this.resetForStart();
     this.targetDurationMinutes = Number.isFinite(targetDurationMinutes) && targetDurationMinutes > 0 ? targetDurationMinutes : 30;
     this.interviewMode = options?.interviewMode === "practice" ? "practice" : "mock";
+    this.interviewType = options?.interviewType ?? null;
     this.patch({ status: "Connecting", canStart: false, errorMessage: null, paywall: null, autoplayBlocked: false });
 
     try {
@@ -848,13 +851,15 @@ export class InterviewSession {
 
   private interviewContinueInstruction(): string {
     const pending = this.openSpeaker === "candidate" ? this.openText : "";
-    return buildContinueInstruction({
+    const instruction = buildContinueInstruction({
       elapsedMs: this.activeElapsed(),
       targetMinutes: this.targetDurationMinutes,
       turns: this.turns,
       pendingCandidateText: pending,
       interviewMode: this.interviewMode,
+      interviewType: this.interviewType ?? undefined,
     });
+    return this.interviewType ? `${instruction}\n${continueTypeLine(this.interviewType)}` : instruction;
   }
 
   private resumePlayback = (): void => {

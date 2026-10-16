@@ -9,8 +9,9 @@ import { ProductCapabilities } from "@/components/landing/product-capabilities";
 import { ResultsPreview } from "@/components/landing/results-preview";
 import { StoryBuilderPreview } from "@/components/landing/story-builder-preview";
 import { ButtonLink } from "@/components/ui/button";
+import { priceLabel, products } from "@/lib/billing/products";
 
-const assurances = ["No credit card", "Resume-aware", "Personalized feedback"];
+const assurances = ["No credit card for the free practice", "Resume-aware", "Personalized feedback"];
 
 export function LandingPage({ signedIn = false }: { signedIn?: boolean }) {
   const practiceHref = signedIn ? "/interview/new" : "/signup?next=%2Finterview%2Fnew";
@@ -68,7 +69,10 @@ export function LandingPage({ signedIn = false }: { signedIn?: boolean }) {
                 See how it works
               </ButtonLink>
             </div>
-            <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/75">
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/70">
+              One 10-minute practice is free. A full 30-minute interview is {priceLabel(products.fullInterview.priceCents)}. Plus is {priceLabel(products.plus.priceCents)} a month for three full interviews and three voice practices.
+            </p>
+            <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/75">
               {assurances.map((item) => (
                 <li key={item} className="flex items-center gap-2">
                   <svg className="size-3.5 text-[#9eb6ff]" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -100,8 +104,17 @@ export function LandingPage({ signedIn = false }: { signedIn?: boolean }) {
             <Link href={signInHref} className="rounded-md hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
               Sign in
             </Link>
-            <Link href="/signup" className="rounded-md hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+            <Link href={practiceHref} className="rounded-md hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
               Create an account
+            </Link>
+            <Link href="/privacy" className="rounded-md hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+              Privacy
+            </Link>
+            <Link href="/terms" className="rounded-md hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+              Terms
+            </Link>
+            <Link href="/refunds" className="rounded-md hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+              Refunds
             </Link>
           </div>
         </div>

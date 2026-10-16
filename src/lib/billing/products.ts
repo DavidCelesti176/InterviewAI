@@ -9,6 +9,10 @@ export const FULL_CEILING_MINUTES = 35;
 export const STORY_TARGET_MINUTES = 5;
 export const WEAK_ANSWER_TARGET_MINUTES = 10;
 
+export function priceLabel(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 export const products = {
   quickPractice: {
     id: "quick_practice",

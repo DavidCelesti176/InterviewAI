@@ -1,9 +1,10 @@
 import OpenAI from "openai";
 
-import { planCoverage, privateInterviewFlow } from "@/lib/interview/competencies";
+import { planCoverage } from "@/lib/interview/competencies";
 import { buildDifficultyCurve, overallDifficulty } from "@/lib/interview/difficulty";
 import { buildExperienceCalibration, screenTheme } from "@/lib/interview/experience-calibration";
 import { candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
+import { openingFor, styleInstructions } from "@/lib/interview/interview-style";
 import type {
   CompanyInterviewProfile,
   DifficultyCurve,
@@ -141,6 +142,7 @@ export async function buildInterviewBlueprint(
     instructions:
       "Build private guidance for a live interviewer. Do not write a numbered script and do not announce interview phases. Priority order: job description, candidate experience ceiling, interview type, resume, then company style. Company style never raises the authority you may assume and never requires a follow-up on every answer. A hard question tests thinking about work the candidate could have done, not a more senior job. For a 30-minute interview, mark 4 or 5 competencies high. Those are the intended coverage. Mark other useful competencies medium. Medium items are backups, not a list you must finish. For a 10-minute interview, mark about 3 competencies high and do not add a medium list that must be asked. Question-mix numbers are rough percentages. Follow-up notes are angles to use only when an answer is vague, incomplete, or important. Pacing should vary difficulty and leave time to move on. Return at most 7 competencies, 5 resume topics, 5 role topics, 3 follow-up notes, and 4 behaviors to avoid.",
     input: `Interview type: ${config.interviewType}. ${typeNotes[config.interviewType]}
+${styleInstructions(config.interviewType, config.targetDurationMinutes, { confidence: profile.confidence, behavioralEmphasis: profile.behavioralEmphasis, technicalEmphasis: profile.technicalEmphasis }, juniorOpening(role.candidateLevel))}
 ${calibration.ceilingSummary}
 ${calibration.avoidUnsupportedAuthorityAssumptions ? "Behavioral themes must stay inside that ceiling. Use internships, class projects, part-time work, campus roles, or a small business at its real scale. Do not plan questions about persuading executives, managing employees, or owning enterprise strategy." : "Leadership and strategy questions are appropriate when they match the scope above."}
 Candidate level: ${role.candidateLevel}
@@ -185,9 +187,7 @@ Do not copy those sentences into openingStrategy. The opening stays a natural qu
     throw new Error("Interview blueprint was incomplete");
   }
 
-  const openingStrategy = juniorOpening(role.candidateLevel)
-    ? "Begin conversationally. Ask one accessible question about their background, what interested them in this role, or a simple walk-through of an internship, project, or recent experience. Do not open with a strategic challenge, a case, or a multi-part problem."
-    : parsed.openingStrategy;
+  const openingStrategy = openingFor(config.interviewType, juniorOpening(role.candidateLevel));
 
   const avoid = new Set(parsed.behaviorsToAvoid);
   avoid.add("Coaching the candidate or praising every answer");
@@ -247,8 +247,12 @@ Do not copy those sentences into openingStrategy. The opening stays a natural qu
     pacingGuidance: authoredPacing(role.candidateLevel, config.targetDurationMinutes, curve),
     closingStrategy: `${parsed.closingStrategy} Do not invite their questions before about ${candidateQuestionsNotBeforeMinutes(config.targetDurationMinutes)} minutes. Once you do, answer their questions and do not return to an earlier topic.`,
     experienceCalibration: { ...calibration, screenedThemes },
-    coverage: planCoverage(parsed.competencyPriorities.slice(0, 7), config.targetDurationMinutes),
-    privateFlow: privateInterviewFlow(config.targetDurationMinutes),
+    coverage: planCoverage(parsed.competencyPriorities.slice(0, 7), config.targetDurationMinutes, config.interviewType),
+    privateFlow: styleInstructions(config.interviewType, config.targetDurationMinutes, {
+      confidence: profile.confidence,
+      behavioralEmphasis: profile.behavioralEmphasis,
+      technicalEmphasis: profile.technicalEmphasis,
+    }, juniorOpening(role.candidateLevel)),
   };
 }
 

@@ -1,5 +1,5 @@
 import { isConnectivityCheck, pacingDiagnostics } from "@/lib/interview/pacing-diagnostics";
-import type { InterviewTurn } from "@/lib/interview/types";
+import type { InterviewTurn, InterviewType } from "@/lib/interview/types";
 
 export type InterviewPhase = "INTRO" | "CORE" | "LATE_CORE" | "CANDIDATE_QUESTIONS" | "CLOSING" | "COMPLETE";
 
@@ -54,6 +54,7 @@ export function buildContinueInstruction(input: {
   turns: InterviewTurn[];
   pendingCandidateText?: string;
   interviewMode?: "practice" | "mock";
+  interviewType?: InterviewType;
 }): string {
   const minutes = Math.max(0, Math.round(input.elapsedMs / 60_000));
   const target = input.targetMinutes > 0 ? input.targetMinutes : 30;
@@ -77,7 +78,7 @@ If they are finished, close warmly. Do not ask another interview question.`;
       : "Most answers get zero or one follow-up. A second is only for a vague answer, a missed part, or an important claim that is still unclear.";
 
   const clock = tooEarly
-    ? `Do not invite their questions and do not say the interview is winding down. That phase is not appropriate before about ${notBefore} minutes. Cover another high-priority competency you have not already covered well.`
+    ? `Do not invite their questions and do not say the interview is winding down. That phase is not appropriate before about ${notBefore} minutes. ${nextTopic(input.interviewType)}`
     : `You may finish the current thread. Do not open a large new topic. If the important ground is covered, you may invite their questions. Once you do, stay there.`;
 
   const heard = connectivity
@@ -91,6 +92,16 @@ ${followUpNote}
 ${heard}
 Challenge thinking about their own work. Do not ask for senior authority they have not had.
 Ask one question, then wait.`;
+}
+
+function nextTopic(type: InterviewType | undefined): string {
+  if (type === "recruiter") {
+    return "Stay on background, motivation, and fit. A 30-minute screen is still a screen. Do not open a difficult behavioral competency question or a role scenario.";
+  }
+  if (type === "behavioral") return "Ask for another past example you have not covered, with a normal transition.";
+  if (type === "role-specific") return "Ask about the work this job requires. Do not cold-open a scenario before a setup question.";
+  if (type === "hiring-manager") return "Go deeper on one experience they have already described, or move to judgment, impact, or motivation.";
+  return "Cover another high-priority competency you have not already covered well.";
 }
 
 function rescueLine(mode: "practice" | "mock" | undefined): string {

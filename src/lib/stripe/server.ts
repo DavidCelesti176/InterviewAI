@@ -2,17 +2,25 @@ import Stripe from "stripe";
 
 let client: Stripe | null = null;
 
-export function assertStripeTestMode(env: Record<string, string | undefined> = process.env): void {
+export function stripeLiveEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.STRIPE_MODE === "live";
+}
+
+export function assertStripeMode(env: Record<string, string | undefined> = process.env): void {
   const secret = env.STRIPE_SECRET_KEY ?? "";
-  if (secret.startsWith("sk_live")) {
-    throw new Error("Live Stripe keys are disabled.");
+  const live = stripeLiveEnabled(env);
+  if (live && !secret.startsWith("sk_live")) {
+    throw new Error("STRIPE_MODE=live requires a live secret key.");
+  }
+  if (!live && secret.startsWith("sk_live")) {
+    throw new Error("Live Stripe keys require STRIPE_MODE=live.");
   }
 }
 
 export function stripeSecretKey(env: Record<string, string | undefined> = process.env): string {
   const value = env.STRIPE_SECRET_KEY?.trim() ?? "";
   if (!value) throw new Error("STRIPE_SECRET_KEY is not configured.");
-  if (value.startsWith("sk_live")) throw new Error("Live Stripe keys are disabled.");
+  assertStripeMode({ ...env, STRIPE_SECRET_KEY: value });
   return value;
 }
 
@@ -23,7 +31,7 @@ export function stripeWebhookSecret(env: Record<string, string | undefined> = pr
 }
 
 export function getStripe(): Stripe {
-  assertStripeTestMode();
+  assertStripeMode();
   if (!client) {
     client = new Stripe(stripeSecretKey());
   }

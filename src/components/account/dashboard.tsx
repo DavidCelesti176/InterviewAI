@@ -102,7 +102,7 @@ export function Dashboard() {
             {user && !user.emailVerified ? (
               <p className="text-sm text-muted">Verify your email when you can. You can keep using InterviewAI.</p>
             ) : null}
-            <CheckoutStatus />
+            <CheckoutStatus onBilling={setBilling} />
 
             <section className="grid gap-4 sm:grid-cols-2" aria-label="Credits and streak">
               <CreditsCard billing={billing} loading={loading} />

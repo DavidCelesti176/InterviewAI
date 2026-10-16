@@ -248,7 +248,7 @@ export function InterviewRoom({
         {snapshot.canStart && !snapshot.paywall && checkoutStatus !== "confirming" ? (
           <Button
             type="button"
-            onClick={() => void sessionRef.current?.start(setup.interviewId, setup.interviewerProfileId, setup.targetDurationMinutes, { interviewMode: interviewModeOf(setup.interviewMode) })}
+            onClick={() => void sessionRef.current?.start(setup.interviewId, setup.interviewerProfileId, setup.targetDurationMinutes, { interviewMode: interviewModeOf(setup.interviewMode), interviewType: setup.interviewType })}
           >
             {mode === "practice" ? "Start practice" : "Start interview"}
           </Button>
@@ -297,7 +297,7 @@ export function InterviewRoom({
         </Button>
       </div>
 
-      <details className="relative mx-5 mb-3 shrink-0 rounded-[14px] border border-dashed border-white/15 px-4 py-2 text-sm text-white/70 sm:mx-8">
+      {process.env.NODE_ENV === "development" ? <details className="relative mx-5 mb-3 shrink-0 rounded-[14px] border border-dashed border-white/15 px-4 py-2 text-sm text-white/70 sm:mx-8">
         <summary className="cursor-pointer font-medium text-white/80">Developer debug</summary>
         <div className="mt-4 flex flex-col gap-4">
           <p>
@@ -372,7 +372,7 @@ export function InterviewRoom({
             </ol>
           </div>
         </div>
-      </details>
+      </details> : null}
       {snapshot.paused && !finished && !helpOpen ? (
         <PauseOverlay
           interviewMode={interviewModeOf(setup.interviewMode)}

@@ -1,5 +1,5 @@
 import { processVerifiedStripeEvent } from "@/lib/stripe/process-event";
-import { getStripe, stripeWebhookSecret } from "@/lib/stripe/server";
+import { getStripe, stripeLiveEnabled, stripeWebhookSecret } from "@/lib/stripe/server";
 
 export const runtime = "nodejs";
 
@@ -13,8 +13,8 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Invalid Stripe signature" }, { status: 400 });
   }
-  if (event.livemode) {
-    return Response.json({ error: "Live Stripe events are disabled." }, { status: 400 });
+  if (event.livemode !== stripeLiveEnabled()) {
+    return Response.json({ error: "Stripe mode does not match this server." }, { status: 400 });
   }
   try {
     await processVerifiedStripeEvent(event);

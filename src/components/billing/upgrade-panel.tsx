@@ -3,16 +3,13 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { authorizedFetch } from "@/lib/account/client";
 import { startCheckout } from "@/lib/billing/checkout-client";
 import type { PaywallReason } from "@/lib/billing/paywall";
-import { products } from "@/lib/billing/products";
+import { priceLabel, products } from "@/lib/billing/products";
 import type { BillingProjection } from "@/lib/billing/types";
 import type { CheckoutProduct } from "@/lib/stripe/catalog";
-
-function dollars(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export function UpgradePanel({
   reason,
@@ -48,8 +45,8 @@ export function UpgradePanel({
 
   const alreadyPlus = billing?.plan === "plus";
   const quickAvailable = billing?.freeQuickAvailable === true;
-  const fullPrice = dollars(products.fullInterview.priceCents);
-  const plusPrice = dollars(products.plus.priceCents);
+  const fullPrice = priceLabel(products.fullInterview.priceCents);
+  const plusPrice = priceLabel(products.plus.priceCents);
 
   async function buy(product: CheckoutProduct) {
     setCheckoutError("");
@@ -116,6 +113,9 @@ export function UpgradePanel({
         </div>
       ) : null}
       {checkoutError ? <p className="mt-3 text-sm text-danger">{checkoutError}</p> : null}
+      <p className="mt-4 text-xs text-muted">
+        By paying you agree to the <Link href="/terms" className="underline">terms</Link> and <Link href="/refunds" className="underline">refund policy</Link>.
+      </p>
       {reason === "full_mock" && quickAvailable && onUseQuick ? (
         <p className="mt-4 text-sm text-muted">
           Your free 10-minute Quick Practice is still open.{" "}

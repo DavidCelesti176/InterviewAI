@@ -75,7 +75,8 @@ export type StripeGrantIntent =
   | { kind: "ignore"; reason: string; eventId: string };
 
 export function stripeEventIntent(event: Stripe.Event, env: Record<string, string | undefined> = process.env): StripeGrantIntent {
-  if (event.livemode) return { kind: "ignore", reason: "live_event", eventId: event.id };
+  const live = env.STRIPE_MODE === "live";
+  if (event.livemode !== live) return { kind: "ignore", reason: event.livemode ? "live_event" : "test_event", eventId: event.id };
   switch (event.type) {
     case "checkout.session.completed":
       return checkoutIntent(event.data.object as Stripe.Checkout.Session, event.id, env);

@@ -1,3 +1,6 @@
+import { frameworkForCompetency } from "@/lib/interview/interview-style";
+import type { InterviewType } from "@/lib/interview/types";
+
 export type CompetencyId =
   | "motivation"
   | "conflict"
@@ -108,7 +111,8 @@ export function isCompetencyId(value: string): value is CompetencyId {
 }
 
 export function coverageLimit(targetMinutes: number): { intendedHigh: number; backupMedium: number } {
-  if (targetMinutes <= 10) return { intendedHigh: 3, backupMedium: 0 };
+  if (targetMinutes <= 12) return { intendedHigh: 3, backupMedium: 0 };
+  if (targetMinutes <= 24) return { intendedHigh: 4, backupMedium: 1 };
   return { intendedHigh: 5, backupMedium: 2 };
 }
 
@@ -127,6 +131,7 @@ export type PlannedCompetency = {
 export function planCoverage(
   items: Array<{ competency: string; priority: CompetencyPriority; reason: string }>,
   targetMinutes: number,
+  interviewType: InterviewType = "mixed",
 ): PlannedCompetency[] {
   const limit = coverageLimit(targetMinutes);
   const planned: PlannedCompetency[] = [];
@@ -147,7 +152,7 @@ export function planCoverage(
       priority: item.priority,
       role: "skip",
       evidence: match?.evidence ?? "A specific example at the candidate's real level of experience.",
-      framework: !match ? "structured_reasoning" : match.id === "motivation" ? "motivation" : "star",
+      framework: frameworkForCompetency(match?.id ?? "role_specific", interviewType),
       reason: item.reason.trim(),
     });
   }
@@ -164,7 +169,17 @@ export function planCoverage(
       item.role = "skip";
     }
   }
+  if (interviewType === "recruiter") capRecruiterStories(planned);
   return planned;
+}
+
+function capRecruiterStories(planned: PlannedCompetency[]): void {
+  let stories = 0;
+  for (const item of planned) {
+    if (item.role === "skip" || item.framework !== "star") continue;
+    stories += 1;
+    if (stories > 2) item.role = "backup";
+  }
 }
 
 export function privateInterviewFlow(targetMinutes: number): string {

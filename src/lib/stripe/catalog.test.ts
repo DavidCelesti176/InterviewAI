@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { checkoutMode, parseCheckoutProduct, stripePriceId } from "./catalog";
-import { assertStripeTestMode } from "./server";
+import { assertStripeMode } from "./server";
 
 test("checkout accepts only internal product ids", () => {
   assert.equal(parseCheckoutProduct("full_mock"), "full_mock");
@@ -22,7 +22,9 @@ test("price ids come from environment variables", () => {
   assert.throws(() => stripePriceId("full_mock", { STRIPE_PRICE_FULL_MOCK: "prod_x" }), /Price id/);
 });
 
-test("live Stripe secret keys are rejected", () => {
-  assert.throws(() => assertStripeTestMode({ STRIPE_SECRET_KEY: "sk_live_123" }), /Live Stripe keys/);
-  assert.doesNotThrow(() => assertStripeTestMode({ STRIPE_SECRET_KEY: "sk_test_123" }));
+test("live Stripe keys are allowed only when live mode is explicit", () => {
+  assert.throws(() => assertStripeMode({ STRIPE_SECRET_KEY: "sk_live_123" }), /STRIPE_MODE=live/);
+  assert.throws(() => assertStripeMode({ STRIPE_MODE: "live", STRIPE_SECRET_KEY: "sk_test_123" }), /live secret key/);
+  assert.doesNotThrow(() => assertStripeMode({ STRIPE_SECRET_KEY: "sk_test_123" }));
+  assert.doesNotThrow(() => assertStripeMode({ STRIPE_MODE: "live", STRIPE_SECRET_KEY: "sk_live_123" }));
 });

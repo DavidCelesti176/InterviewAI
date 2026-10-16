@@ -16,6 +16,7 @@ import { ProgressSteps } from "@/components/ui/progress-steps";
 import { UploadZone } from "@/components/ui/upload-zone";
 import { authorizedFetch } from "@/lib/account/client";
 import { paywallReason, type PaywallReason } from "@/lib/billing/paywall";
+import { priceLabel, products } from "@/lib/billing/products";
 import type { BillingProjection } from "@/lib/billing/types";
 import type { ResumeCard } from "@/lib/account/types";
 import { readSavedStory } from "@/lib/story/client";
@@ -685,7 +686,7 @@ function InterviewStep({
           ))}
         </div>
         <p className="text-sm text-muted">
-          Your interviewer will manage the pacing naturally, so the conversation may finish slightly early or run a little longer.
+          One 10-minute practice is free. A full 30-minute interview is {priceLabel(products.fullInterview.priceCents)}, or Plus is {priceLabel(products.plus.priceCents)} a month. The conversation may finish slightly early or run a little longer.
         </p>
       </div>
       <div className="flex flex-col gap-3">

@@ -151,7 +151,7 @@ export function AccountPage() {
               });
             }}
           >
-            {portalBusy ? "Opening…" : "Manage subscription"}
+            {portalBusy ? "Opening…" : "Manage billing"}
           </Button>
         ) : null}
       </Card>

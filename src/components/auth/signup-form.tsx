@@ -23,11 +23,10 @@ export function SignupForm() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<"google" | "email" | null>(null);
   const started = useRef(false);
-  const next = safeNextPath(params.get("next"));
+  const next = safeNextPath(params.get("next") ?? "/interview/new");
 
   useEffect(() => {
     if (ready && user && !started.current) router.replace(next);
@@ -69,7 +68,7 @@ export function SignupForm() {
       setError("Enter a valid email address.");
       return;
     }
-    const passwordError = passwordProblem(password, confirm);
+    const passwordError = passwordProblem(password);
     if (passwordError) {
       setError(passwordError);
       return;
@@ -118,16 +117,7 @@ export function SignupForm() {
             required
           />
         </Field>
-        <Field label="Confirm password">
-          <TextInput
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-            required
-          />
-        </Field>
-        <p className="text-sm text-muted">Use at least 8 characters, with a letter and a number.</p>
+        <p className="text-sm text-muted">Use at least 8 characters, with a letter and a number. You’ll go straight to the interview you started.</p>
         {error ? (
           <p className="text-sm text-danger" role="alert">
             {error}

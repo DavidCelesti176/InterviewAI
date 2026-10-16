@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { authorizedFetch } from "@/lib/account/client";
@@ -22,12 +22,14 @@ function continueInterview(): string | null {
   return null;
 }
 
-export function CheckoutStatus() {
+export function CheckoutStatus({ onBilling }: { onBilling?: (billing: BillingProjection) => void }) {
   const router = useRouter();
   const { ready, user } = useAuth();
   const [wanted] = useState(checkoutRequested);
   const [round, setRound] = useState(0);
   const [state, setState] = useState<"confirming" | "ready" | "delayed">("confirming");
+  const onBillingRef = useRef(onBilling);
+  onBillingRef.current = onBilling;
 
   useEffect(() => {
     if (!wanted || !ready || !user) return;
@@ -41,6 +43,7 @@ export function CheckoutStatus() {
         if (cancelled) return;
         if (response.ok) {
           const body = (await response.json()) as { billing?: BillingProjection };
+          if (body.billing) onBillingRef.current?.(body.billing);
           if (body.billing && paymentIsReady(body.billing)) {
             setState("ready");
             const next = continueInterview();
@@ -52,13 +55,10 @@ export function CheckoutStatus() {
         if (cancelled) return;
       }
       attempts += 1;
-      if (attempts >= 8) {
-        if (!cancelled) setState("delayed");
-        return;
-      }
+      if (attempts === 8 && !cancelled) setState("delayed");
       window.setTimeout(() => {
         if (!cancelled) void poll();
-      }, 1500);
+      }, attempts < 8 ? 1500 : 4000);
     }
 
     void poll();

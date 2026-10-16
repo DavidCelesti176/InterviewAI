@@ -122,10 +122,19 @@ test("live events and unexpected prices are ignored", () => {
   const live = event("checkout.session.completed", {
     id: "cs_live",
     mode: "payment",
+    payment_status: "paid",
     metadata: { firebaseUid: "user_1", purchaseType: "full_mock" },
   });
   live.livemode = true;
   assert.equal(stripeEventIntent(live, env).kind, "ignore");
+  assert.equal(stripeEventIntent(live, { ...env, STRIPE_MODE: "live" }).kind, "grant_full_mock");
+  const testEvent = event("checkout.session.completed", {
+    id: "cs_test",
+    mode: "payment",
+    payment_status: "paid",
+    metadata: { firebaseUid: "user_1", purchaseType: "full_mock" },
+  });
+  assert.equal(stripeEventIntent(testEvent, { ...env, STRIPE_MODE: "live" }).kind, "ignore");
   const wrongPrice = stripeEventIntent(
     event("checkout.session.completed", {
       id: "cs_2",

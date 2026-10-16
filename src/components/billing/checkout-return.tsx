@@ -48,16 +48,10 @@ export function useCheckoutReturn(): CheckoutReturnStatus {
         if (cancelled) return;
       }
       attempts += 1;
-      if (attempts >= 8) {
-        if (!cancelled) {
-          setStatus("delayed");
-          clearCheckoutQuery();
-        }
-        return;
-      }
+      if (attempts === 8 && !cancelled) setStatus("delayed");
       window.setTimeout(() => {
         if (!cancelled) void poll();
-      }, 1500);
+      }, attempts < 8 ? 1500 : 4000);
     }
 
     void poll();

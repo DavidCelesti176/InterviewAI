@@ -1,4 +1,5 @@
 import { ButtonLink } from "@/components/ui/button";
+import { priceLabel, products } from "@/lib/billing/products";
 
 export function FinalCta({ practiceHref }: { practiceHref: string }) {
   return (
@@ -12,11 +13,13 @@ export function FinalCta({ practiceHref }: { practiceHref: string }) {
           <ButtonLink href={practiceHref} className="px-6 py-3 text-base">
             Start practicing free
           </ButtonLink>
-          <ButtonLink href="/signup" variant="room" className="px-6 py-3 text-base">
+          <ButtonLink href={practiceHref} variant="room" className="px-6 py-3 text-base">
             Create an account
           </ButtonLink>
         </div>
-        <p className="mt-4 text-sm text-white/60">Takes about 2 minutes to set up.</p>
+        <p className="mt-4 text-sm text-white/60">
+          One 10-minute practice is free, with no credit card. A full interview is {priceLabel(products.fullInterview.priceCents)}. Plus is {priceLabel(products.plus.priceCents)} a month.
+        </p>
       </div>
     </section>
   );

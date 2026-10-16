@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const billing = await billingProjection(user.uid);
   return Response.json({
     billing,
-    canManageSubscription: Boolean(account.stripeCustomerId && (account.plan === "plus" || account.subscriptionStatus === "past_due")),
+    canManageSubscription: Boolean(account.stripeCustomerId),
   });
 }
 
