@@ -1,3 +1,4 @@
+import { firstAttemptTurns } from "./practice-coaching";
 import { isConnectivityCheck, pacingDiagnostics } from "@/lib/interview/pacing-diagnostics";
 import type { InterviewTurn, InterviewType } from "@/lib/interview/types";
 
@@ -19,6 +20,7 @@ export function invitesCandidateQuestionsTooEarly(elapsedMs: number, targetMinut
 }
 
 export function interviewPhase(turns: InterviewTurn[], elapsedMs: number, targetMinutes: number): InterviewPhase {
+  turns = firstAttemptTurns(turns);
   let phase: InterviewPhase = "INTRO";
   for (const turn of turns) {
     if (turn.speaker !== "interviewer" || !turn.text.trim()) continue;

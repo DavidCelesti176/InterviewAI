@@ -1,3 +1,4 @@
+import { readPracticeMetadata } from "@/lib/interview/practice-coaching";
 import { closeLiveUsage, markCandidateSpoke } from "@/lib/billing/store";
 import { authenticate, isUser } from "@/lib/firebase/auth-server";
 import { saveInterviewProgress } from "@/lib/firebase/data";
@@ -22,6 +23,7 @@ function readTurns(value: unknown): InterviewTurn[] {
     turns.push({
       id: typeof turn.id === "string" && turn.id.trim() ? turn.id.trim().slice(0, 80) : `turn-${turns.length + 1}`,
       speaker: turn.speaker,
+      ...(readPracticeMetadata(turn.practice) ? { practice: readPracticeMetadata(turn.practice) } : {}),
       text,
       timestampMs: typeof turn.timestampMs === "number" && Number.isFinite(turn.timestampMs) ? turn.timestampMs : 0,
     });

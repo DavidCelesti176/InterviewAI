@@ -228,4 +228,5 @@ export interface InterviewTurn {
   speaker: "candidate" | "interviewer";
   text: string;
   timestampMs: number;
+  practice?: { questionId: string; kind: "firstAttempt" | "coaching" | "retryQuestion" | "retryAttempt" | "retryReview"; coachingUsed?: boolean; retryReviewUsed?: boolean };
 }

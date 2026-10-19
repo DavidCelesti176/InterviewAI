@@ -179,7 +179,7 @@ export function InterviewRoom({
   const interviewer = interviewerById(setup.interviewerProfileId);
   const pacing = process.env.NODE_ENV === "development" ? pacingDiagnostics(snapshot.turns, snapshot.elapsedMs) : null;
   const coachingEnabled = mode === "interview" && interviewModeOf(setup.interviewMode) === "practice";
-  const live = mode === "interview" && snapshot.canEnd && !snapshot.paused && !finished;
+  const live = snapshot.practiceStage === "interviewing" && mode === "interview" && snapshot.canEnd && !snapshot.paused && !finished;
   const canRestart =
     snapshot.canEnd &&
     !snapshot.paused &&
@@ -267,6 +267,18 @@ export function InterviewRoom({
         <div ref={audioSlotRef} className={snapshot.autoplayBlocked ? "mt-4 w-full max-w-md" : "sr-only"} />
       </div>
       )}
+
+      {setup.interviewMode === "practice" && snapshot.canEnd && !snapshot.paused && ["choice", "retry-choice", "review-choice", "done"].includes(snapshot.practiceStage) ? (
+        <div role="region" aria-label="Answer coaching" className="mx-auto w-full max-w-lg shrink-0 rounded-2xl border border-white/20 bg-zinc-900 px-4 py-3 text-white">
+          <p className="text-sm">{snapshot.practiceStage === "choice" ? "How did that answer land?" : snapshot.practiceStage === "retry-choice" ? "Ready to try that answer again?" : snapshot.practiceStage === "review-choice" ? "Would you like a quick review of your retry?" : "Ready to continue?"}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button type="button" variant="room" onClick={() => sessionRef.current?.practiceAction("continue")}>{snapshot.practiceStage === "retry-choice" || snapshot.practiceStage === "done" ? "Continue interview" : "Continue"}</Button>
+            {snapshot.practiceStage !== "done" ? <Button type="button" variant="room" onClick={() => sessionRef.current?.practiceAction(snapshot.practiceStage === "choice" ? "coach" : snapshot.practiceStage === "retry-choice" ? "retry" : "review")}>
+              {snapshot.practiceStage === "choice" ? "Coach this answer" : snapshot.practiceStage === "retry-choice" ? "Try again" : "Review retry"}
+            </Button> : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="relative flex shrink-0 flex-wrap items-center justify-center gap-3 px-5 pt-3 pb-4">
         {snapshot.canStart && !snapshot.paywall && checkoutStatus !== "confirming" ? (
@@ -483,6 +495,7 @@ function roomSignature(snapshot: InterviewSnapshot): string {
     snapshot.contextUsageRatio,
     snapshot.delegationFailures,
     snapshot.opening,
+    snapshot.practiceStage,
   ].join("|");
 }
 

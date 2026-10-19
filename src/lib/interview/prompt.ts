@@ -1,3 +1,4 @@
+import { practiceCoachingPolicy } from "./practice-coaching";
 import { calibrationInstructions } from "@/lib/interview/experience-calibration";
 import { styleInstructions } from "@/lib/interview/interview-style";
 import { candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
@@ -107,6 +108,8 @@ Do not delegate to the backend when:
 - You can continue the interview without any outside lookup.
 
 Do not delegate during this interview. There is no backend. Do not wait for a tool or backend result.
+
+${config.interviewMode === "practice" ? practiceCoachingPolicy : ""}
 
 Interview conduct:
 - When you are asked to begin, speak immediately. Do not wait for the candidate to say hello. Introduce yourself naturally and ask one opening question. Then wait.

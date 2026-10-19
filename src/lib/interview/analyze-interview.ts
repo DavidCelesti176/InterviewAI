@@ -1,3 +1,4 @@
+import { firstAttemptTurns } from "./practice-coaching";
 import OpenAI from "openai";
 
 import { readinessLabel } from "@/lib/interview/analysis-rubric";
@@ -226,6 +227,8 @@ export async function analyzeInterview(input: {
   confirmedStories?: string;
   onStep?: (step: AnalysisStep, state: "active" | "done") => void;
 }): Promise<{ analysis: InterviewAnalysis; debug: AnalysisDebug }> {
+  const coachingCount = input.turns.filter(turn => turn.practice?.kind === "firstAttempt" && turn.practice.coachingUsed).length;
+  input = { ...input, turns: firstAttemptTurns(input.turns) };
   const onStep = input.onStep ?? (() => undefined);
   onStep("reviewing", "active");
   const candidateText = input.turns
@@ -269,6 +272,7 @@ export async function analyzeInterview(input: {
   const parsed: unknown = JSON.parse(response.output_text);
   const grounded = [candidateText, input.interview.config.candidate.resumeText, input.interview.storyContext ?? "", input.confirmedStories ?? ""].join("\n");
   const analysis = tier === "basic" ? normalizeBasic(parsed, measured) : normalizeFull(parsed, measured, grounded);
+  if (coachingCount) analysis.assistanceNote = `Coaching used on ${coachingCount} answer${coachingCount === 1 ? "" : "s"}. Readiness evaluates first attempts; coached retries are excluded. ${analysis.assistanceNote}`.trim();
   onStep("building_plan", "done");
 
   return {

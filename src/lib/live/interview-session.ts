@@ -1,8 +1,9 @@
+import { coachingInstruction, firstAttemptTurns, substantiveAnswer, type PracticeStage } from "@/lib/interview/practice-coaching";
 import { heartbeatDueDelay } from "@/lib/billing/minutes";
 import { PaywallError, paywallReason, type PaywallReason } from "@/lib/billing/paywall";
 import { currentIdToken } from "@/lib/firebase/client";
 import type { InterviewPauseEvent } from "@/lib/interview/help-types";
-import { buildContinueInstruction, candidateQuestionsNotBeforeMinutes } from "@/lib/interview/interview-phase";
+import { buildContinueInstruction, candidateQuestionsNotBeforeMinutes, interviewPhase } from "@/lib/interview/interview-phase";
 import { continueTypeLine } from "@/lib/interview/interview-style";
 import { openingInstruction } from "@/lib/interview/opening";
 import { pauseInstruction, restartQuestionInstruction, resumeInstruction, resumeRepeatInstruction } from "@/lib/interview/session-cues";
@@ -48,6 +49,7 @@ export type InterviewSnapshot = {
   contextUsageRatio: number | null;
   delegationFailures: number;
   opening: boolean;
+  practiceStage: PracticeStage;
 };
 
 type LiveEvent = Record<string, unknown> & { type?: unknown };
@@ -90,6 +92,7 @@ export function createSnapshot(): InterviewSnapshot {
     contextUsageRatio: null,
     delegationFailures: 0,
     opening: false,
+    practiceStage: "interviewing",
   };
 }
 
@@ -167,6 +170,7 @@ export class InterviewSession {
   private openSpeaker: InterviewTurn["speaker"] | null = null;
   private openText = "";
   private openTimestamp = 0;
+  private openPractice: InterviewTurn["practice"] = undefined;
   private lastCandidateSpeechAt: number | null = null;
   private targetDurationMinutes = 30;
   private interviewMode: "practice" | "mock" = "mock";
@@ -188,6 +192,12 @@ export class InterviewSession {
   private resumeMuted = false;
   private pauseUsageBaseline: number | null = null;
   private pausedUsageAccumulated = 0;
+  private practiceQuestion = "";
+  private practiceAnswer = "";
+  private practiceQuestionId = "";
+  private practiceSpeechStarted = false;
+  private practiceRetry = "";
+  private practiceOfferedQuestions = new Set<string>();
   private timeDomain = new Uint8Array(0);
   private frequency = new Uint8Array(0);
 
@@ -367,6 +377,39 @@ export class InterviewSession {
     }
   }
 
+  practiceAction(action: "continue" | "coach" | "retry" | "review"): void {
+    if (this.interviewMode !== "practice" || !this.ready || this.closing || this.pausedAt !== null || this.events?.readyState !== "open") return;
+    const stage = this.snapshot.practiceStage;
+    let content = "";
+    if (action === "continue" && ["choice", "retry-choice", "review-choice", "done"].includes(stage)) {
+      this.flushTurn();
+      this.patch({ practiceStage: "interviewing" });
+      content = `CONTINUE: The candidate chose to continue. Coaching is finished for this question. Do not repeat it. ${this.interviewContinueInstruction()}`;
+    } else if (action === "coach" && stage === "choice") {
+      this.markPracticeUsed(false);
+      this.practiceSpeechStarted = false;
+      this.patch({ practiceStage: "coaching" });
+      content = coachingInstruction(this.practiceQuestion, this.practiceAnswer, this.interviewType);
+    } else if (action === "retry" && stage === "retry-choice") {
+      this.flushTurn();
+      this.patch({ practiceStage: "retry" });
+      content = `RETRY: Naturally repeat this exact question or lightly rephrase it, keeping the SAME competency. Do not advance blueprint coverage. Then listen and wait silently after the answer for client instruction. Question data: ${JSON.stringify(this.practiceQuestion)}`;
+    } else if (action === "review" && stage === "review-choice") {
+      this.markPracticeUsed(true);
+      this.practiceSpeechStarted = false;
+      this.patch({ practiceStage: "review" });
+      content = coachingInstruction(this.practiceQuestion, this.practiceAnswer, this.interviewType, true, this.practiceRetry);
+    }
+    if (!content) return;
+    this.nudgedForTurn = true;
+    this.send({ type: "session.instructions.append", event_id: this.commandId("practice"), delegation_id: null, content });
+  }
+
+  private markPracticeUsed(review: boolean): void {
+    this.turns = this.turns.map(turn => turn.id === this.practiceQuestionId && turn.practice ? { ...turn, practice: { ...turn.practice, coachingUsed: true, ...(review ? { retryReviewUsed: true } : {}) } } : turn);
+    this.patch({ turns: this.turns });
+  }
+
   mute(): void {
     if (!this.snapshot.canMute || this.snapshot.muted) return;
     this.send({
@@ -418,6 +461,7 @@ export class InterviewSession {
 
   restartQuestion(): void {
     if (!this.ready || this.closing || this.pausedAt !== null || !this.events || this.events.readyState !== "open") return;
+    if (this.snapshot.practiceStage !== "interviewing") return;
     if (!this.hasAskedQuestion()) return;
     if (Date.now() < this.restartLockedUntil) return;
     this.restartLockedUntil = Date.now() + 2_000;
@@ -507,10 +551,17 @@ export class InterviewSession {
     this.handledDelegations.clear();
     this.speakingUntil = 0;
     this.turns = [];
+    this.practiceQuestion = "";
+    this.practiceAnswer = "";
+    this.practiceQuestionId = "";
+    this.practiceSpeechStarted = false;
+    this.practiceRetry = "";
+    this.practiceOfferedQuestions.clear();
     this.turnCounter = 0;
     this.openSpeaker = null;
     this.openText = "";
     this.openTimestamp = 0;
+    this.openPractice = undefined;
     this.lastCandidateSpeechAt = null;
     this.lastInterviewerSpeechAt = null;
     this.nudgedForTurn = false;
@@ -646,6 +697,7 @@ export class InterviewSession {
       const delta = transcriptDelta(event);
       if (delta) {
         this.lastInterviewerSpeechAt = Date.now();
+        if (["coaching", "review"].includes(this.snapshot.practiceStage)) this.practiceSpeechStarted = true;
         this.ignoreCandidateUntilInterviewer = false;
         this.clearOpeningTimer();
         this.nudgedForTurn = true;
@@ -696,6 +748,7 @@ export class InterviewSession {
     this.timer = setInterval(() => {
       const elapsed = this.activeElapsed();
       if (elapsed !== this.snapshot.elapsedMs) this.patch({ elapsedMs: elapsed });
+      this.settlePracticeSpeech();
       this.nudgeClosing();
     }, 250);
     this.armHeartbeat();
@@ -707,6 +760,14 @@ export class InterviewSession {
     });
     this.patch({ opening: true });
     this.armOpening();
+  }
+
+  private settlePracticeSpeech(): void {
+    if (this.pausedAt !== null || !this.practiceSpeechStarted || !["coaching", "review"].includes(this.snapshot.practiceStage)) return;
+    if (this.lastInterviewerSpeechAt === null || Date.now() - this.lastInterviewerSpeechAt <= 2500 || performance.now() < this.speakingUntil) return;
+    const reviewed = this.snapshot.practiceStage === "review";
+    this.flushTurn();
+    this.patch({ practiceStage: reviewed ? "done" : "retry-choice" });
   }
 
   private armOpening(): void {
@@ -813,12 +874,17 @@ export class InterviewSession {
     if (!this.openSpeaker) {
       this.openSpeaker = speaker;
       this.openTimestamp = timestampMs;
+      const stage = this.snapshot.practiceStage;
+      const kind = speaker === "candidate" ? (stage === "retry" ? "retryAttempt" : ["coaching", "retry-choice", "review", "done"].includes(stage) ? "retryReview" : undefined) : stage === "coaching" ? "coaching" : stage === "review" ? "retryReview" : stage === "retry" ? "retryQuestion" : undefined;
+      this.openPractice = kind ? { questionId: this.practiceQuestionId, kind } : undefined;
     }
     this.openText += delta;
   }
 
   private flushTurn(): void {
     const text = this.openText.trim();
+    const stage = this.snapshot.practiceStage;
+    const kind = this.openSpeaker === "candidate" ? (stage === "retry" ? "retryAttempt" : undefined) : stage === "coaching" ? "coaching" : stage === "review" ? "retryReview" : stage === "retry" ? "retryQuestion" : undefined;
     if (this.openSpeaker && text) {
       this.turnCounter += 1;
       this.turns = [
@@ -828,6 +894,7 @@ export class InterviewSession {
           speaker: this.openSpeaker,
           text,
           timestampMs: this.openTimestamp,
+          ...(this.openPractice ? { practice: this.openPractice } : kind ? { practice: { questionId: this.practiceQuestionId, kind } } : {}),
         },
       ];
       this.patch({ turns: this.turns });
@@ -835,6 +902,7 @@ export class InterviewSession {
     this.openSpeaker = null;
     this.openText = "";
     this.openTimestamp = 0;
+    this.openPractice = undefined;
   }
 
   private scheduleContinue(): void {
@@ -852,6 +920,26 @@ export class InterviewSession {
       this.scheduleContinue();
       return;
     }
+    if (this.snapshot.practiceStage !== "interviewing" && this.snapshot.practiceStage !== "retry") return;
+    const answer = this.openSpeaker === "candidate" ? this.openText.trim() : "";
+    if (this.snapshot.practiceStage === "retry") {
+      if (!substantiveAnswer(this.interviewMode, this.practiceQuestion, answer)) return;
+      this.practiceRetry = answer;
+      this.flushTurn();
+      this.patch({ practiceStage: "review-choice" });
+      return;
+    }
+    const phase = interviewPhase(this.turns, this.activeElapsed(), this.targetDurationMinutes);
+    if (phase !== "CANDIDATE_QUESTIONS" && phase !== "CLOSING" && !this.cues && !this.practiceOfferedQuestions.has(this.lastQuestionText().trim().toLowerCase()) && substantiveAnswer(this.interviewMode, this.lastQuestionText(), answer)) {
+      this.practiceQuestion = this.lastQuestionText();
+      this.practiceOfferedQuestions.add(this.practiceQuestion.trim().toLowerCase());
+      this.practiceAnswer = answer;
+      this.flushTurn();
+      this.practiceQuestionId = this.turns.at(-1)!.id;
+      this.turns = this.turns.map(turn => turn.id === this.practiceQuestionId ? { ...turn, practice: { questionId: this.practiceQuestionId, kind: "firstAttempt" } } : turn);
+      this.patch({ practiceStage: "choice", turns: this.turns });
+      return;
+    }
     this.nudgedForTurn = true;
     this.send({
       type: "session.instructions.append",
@@ -866,7 +954,7 @@ export class InterviewSession {
     const instruction = buildContinueInstruction({
       elapsedMs: this.activeElapsed(),
       targetMinutes: this.targetDurationMinutes,
-      turns: this.turns,
+      turns: firstAttemptTurns(this.turns),
       pendingCandidateText: pending,
       interviewMode: this.interviewMode,
       interviewType: this.interviewType ?? undefined,
@@ -1027,6 +1115,7 @@ export class InterviewSession {
   }
 
   private nudgeClosing(): void {
+    if (this.snapshot.practiceStage !== "interviewing") return;
     if (this.closingNudged || this.authorizedSeconds <= 0 || this.startedAt === null || !this.events || this.events.readyState !== "open") return;
     const connectedMs = Date.now() - this.startedAt;
     const minutes = this.authorizedSeconds / 60;

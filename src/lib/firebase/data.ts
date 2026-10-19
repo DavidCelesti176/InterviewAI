@@ -1,3 +1,4 @@
+import { readPracticeMetadata } from "@/lib/interview/practice-coaching";
 import type { CollectionReference, DocumentData, Firestore } from "firebase-admin/firestore";
 
 import type { InterviewCard, InterviewStatusName, ResumeCard, UserProfile } from "@/lib/account/types";
@@ -362,6 +363,7 @@ async function readTurns(uid: string, interviewId: string): Promise<InterviewTur
       speaker: data.speaker,
       text: textValue,
       timestampMs: num(data.timestampMs) ?? 0,
+      ...(readPracticeMetadata(data.practice) ? { practice: readPracticeMetadata(data.practice) } : {}),
     });
   }
   return turns;
@@ -421,6 +423,7 @@ export async function saveInterviewProgress(
         speaker: turn.speaker,
         text: turn.text.slice(0, 4000),
         timestampMs: turn.timestampMs,
+        ...(readPracticeMetadata(turn.practice) ? { practice: readPracticeMetadata(turn.practice) } : {}),
         createdAt: now,
       },
       { merge: true },

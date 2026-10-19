@@ -1,3 +1,4 @@
+import { firstAttemptTurns } from "./practice-coaching";
 import type { InterviewTurn } from "@/lib/interview/types";
 
 const connectivitySentence = /^(hello|hey|hi|are you there|you there|can you hear me|still there|anyone there)$/i;
@@ -32,6 +33,7 @@ const candidateQuestionCue =
   /questions (do you have|for me)|anything you(?:'d| would) like to ask|what would you like to ask|questions you have/i;
 
 export function pacingDiagnostics(turns: InterviewTurn[], elapsedMs: number): PacingDiagnostics {
+  turns = firstAttemptTurns(turns);
   const questions = turns.filter((turn) => turn.speaker === "interviewer" && turn.text.includes("?"));
   const followUpsByQuestion: number[] = [];
   let followUps = 0;

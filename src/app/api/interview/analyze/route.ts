@@ -1,3 +1,4 @@
+import { readPracticeMetadata } from "@/lib/interview/practice-coaching";
 import OpenAI from "openai";
 
 import { BILLING_LAUNCH_AT } from "@/lib/billing/products";
@@ -35,6 +36,7 @@ function readTurns(value: unknown): InterviewTurn[] | null {
     turns.push({
       id: typeof turn.id === "string" && turn.id.trim() ? turn.id.trim().slice(0, 80) : `turn-${turns.length + 1}`,
       speaker: turn.speaker,
+      ...(readPracticeMetadata(turn.practice) ? { practice: readPracticeMetadata(turn.practice) } : {}),
       text,
       timestampMs: turn.timestampMs,
     });
